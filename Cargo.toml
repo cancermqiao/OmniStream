@@ -1,0 +1,29 @@
+[workspace]
+members = ["shared", "server", "web"]
+resolver = "2"
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.93"
+license = "MIT"
+
+[workspace.dependencies]
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1.0"
+anyhow = "1.0"
+tracing = "0.1.44"
+tracing-subscriber = "0.3"
+reqwest = { version = "0.12", features = ["json"] }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+dbg_macro = "deny"
+todo = "deny"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "debuginfo"

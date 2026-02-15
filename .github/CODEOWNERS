@@ -1,0 +1,7 @@
+# Default owners
+* @biliup-rust-maintainers
+
+# Crate-specific ownership
+/server/ @biliup-rust-backend
+/web/ @biliup-rust-frontend
+/shared/ @biliup-rust-backend @biliup-rust-frontend

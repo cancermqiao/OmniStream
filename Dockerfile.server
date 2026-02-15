@@ -1,0 +1,26 @@
+FROM rust:1.93-bookworm AS builder
+WORKDIR /build
+
+COPY Cargo.toml Cargo.lock ./
+COPY shared/Cargo.toml shared/Cargo.toml
+COPY server/Cargo.toml server/Cargo.toml
+COPY web/Cargo.toml web/Cargo.toml
+COPY shared/src shared/src
+COPY web/src web/src
+COPY server/src server/src
+
+RUN cargo build --release -p server --bin server
+
+FROM debian:bookworm-slim
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends ca-certificates ffmpeg streamlink \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /data
+COPY --from=builder /build/target/release/server /usr/local/bin/server
+
+ENV BILIUP_DB_PATH=/data/omnistream.db
+ENV RUST_LOG=info
+
+EXPOSE 3000
+CMD ["/usr/local/bin/server"]

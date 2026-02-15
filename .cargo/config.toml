@@ -1,0 +1,9 @@
+[alias]
+xtest = "test --workspace --all-targets"
+xlint = "clippy --workspace --all-targets -- -D warnings"
+xfmt = "fmt --all"
+xcheck = "check --workspace --all-targets"
+
+[build]
+# Keep command output deterministic across environments.
+incremental = true

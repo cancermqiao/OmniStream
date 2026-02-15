@@ -1,0 +1,13 @@
+[application]
+name = "omnistream-app"
+default_platform = "web"
+out_dir = "dist"
+asset_dir = "assets"
+
+[web.app]
+title = "OmniStream App"
+
+[bundle]
+identifier = "com.omnistream.app"
+publisher = "omnistream"
+icon = []

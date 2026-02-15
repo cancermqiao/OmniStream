@@ -1,0 +1,23 @@
+[graph]
+# Audit only default feature sets. Enabling all features pulls in optional
+# desktop GTK3 dependency chains that are not used in our production path.
+all-features = false
+
+[advisories]
+yanked = "warn"
+# Upstream/no-fix advisories in transitive deps (currently from biliup chain).
+ignore = [
+  "RUSTSEC-2023-0071", # rsa timing side-channel advisory (no safe upgrade available)
+  "RUSTSEC-2024-0384", # instant is unmaintained (transitive)
+]
+
+[licenses]
+allow = ["MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "ISC", "Unicode-3.0", "MPL-2.0", "OpenSSL"]
+confidence-threshold = 0.8
+
+[bans]
+multiple-versions = "warn"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "allow"

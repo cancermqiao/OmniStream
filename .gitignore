@@ -1,0 +1,34 @@
+# Rust / Cargo
+/target/
+**/*.rs.bk
+
+# Logs
+*.log
+
+# Runtime data
+*.db
+*.db-shm
+*.db-wal
+*.mp4
+cookies.json
+cookies*.json
+deploy/backups/
+deploy/.state/
+
+# macOS
+.DS_Store
+
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Runtime dirs/files (project root)
+.run/
+data/
+server/config.json
+server/cookies/
+server/*.db
+server/*.db-shm
+server/*.db-wal

@@ -1,0 +1,28 @@
+name: omnistream
+
+services:
+  server:
+    image: ${REGISTRY:-local}/omnistream-server:${IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: Dockerfile.server
+    restart: unless-stopped
+    environment:
+      BILIUP_DB_PATH: /data/omnistream.db
+      BILIUP_RECORDINGS_DIR: /data/recordings
+      RUST_LOG: ${RUST_LOG:-info}
+    volumes:
+      - ./data:/data
+    ports:
+      - "${API_PORT:-3000}:3000"
+
+  web:
+    image: ${REGISTRY:-local}/omnistream-web:${IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    restart: unless-stopped
+    depends_on:
+      - server
+    ports:
+      - "${WEB_PORT:-8080}:8080"
