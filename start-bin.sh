@@ -113,15 +113,8 @@ if [ ! -x "$SERVER_BIN" ]; then
 fi
 
 # 3. 检查/构建前端编译产物
-if ! resolve_web_dir; then
-    if ! command -v dx &> /dev/null; then
-        echo -e "${RED}Error: web build artifacts not found and dx is not installed.${NC}"
-        echo "Install dioxus-cli first:"
-        echo "  cargo install dioxus-cli"
-        exit 1
-    fi
-
-    echo -e "${GREEN}Web build artifacts not found, building release web assets...${NC}"
+rebuild_web_assets() {
+    echo -e "${GREEN}Building release web assets...${NC}"
     (
         cd web
         dx build --platform web --release
@@ -134,6 +127,61 @@ if ! resolve_web_dir; then
         echo -e "${RED}Error: web index.html still not found after build.${NC}"
         echo "Checked: target/dx/app/release/web/public, target/dx/web/release/web/public, web/dist"
         exit 1
+    fi
+}
+
+web_assets_stale() {
+    local index_html="$1"
+    python3 - "$ROOT_DIR" "$index_html" <<'PYCHK'
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+index_html = Path(sys.argv[2])
+
+if not index_html.exists():
+    print("stale")
+    raise SystemExit(0)
+
+index_mtime = index_html.stat().st_mtime
+watched = [root / "web" / "src", root / "web" / "assets", root / "web" / "Cargo.toml", root / "web" / "Dioxus.toml"]
+
+for path in watched:
+    if not path.exists():
+        continue
+    if path.is_file():
+        if path.stat().st_mtime > index_mtime:
+            print("stale")
+            raise SystemExit(0)
+        continue
+    for f in path.rglob("*"):
+        if f.is_file() and f.stat().st_mtime > index_mtime:
+            print("stale")
+            raise SystemExit(0)
+
+print("fresh")
+PYCHK
+}
+
+if ! resolve_web_dir; then
+    if ! command -v dx &> /dev/null; then
+        echo -e "${RED}Error: web build artifacts not found and dx is not installed.${NC}"
+        echo "Install dioxus-cli first:"
+        echo "  cargo install dioxus-cli"
+        exit 1
+    fi
+    rebuild_web_assets
+else
+    INDEX_HTML="${WEB_DIST_DIR}/index.html"
+    if [ "$(web_assets_stale "$INDEX_HTML")" = "stale" ]; then
+        if ! command -v dx &> /dev/null; then
+            echo -e "${RED}Error: web sources changed but dioxus-cli (dx) is not installed.${NC}"
+            echo "Current assets are stale: ${WEB_DIST_DIR}"
+            echo "Install dioxus-cli and rebuild: cargo install dioxus-cli && (cd web && dx build --platform web --release)"
+            exit 1
+        fi
+        echo -e "${BLUE}Detected stale web assets, rebuilding...${NC}"
+        rebuild_web_assets
     fi
 fi
 
