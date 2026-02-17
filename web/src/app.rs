@@ -126,6 +126,17 @@ pub fn App() -> Element {
                                         data.set(next);
                                     }
                                 },
+                                on_manual_upload: move |id: String| async move {
+                                    if let Err(e) = api::trigger_manual_upload(api_url, &id).await {
+                                        #[cfg(target_arch = "wasm32")]
+                                        web_sys::console::error_1(&format!("manual upload failed: {e}").into());
+                                    }
+                                    if let Some(v) = api::fetch_downloads(api_url).await {
+                                        let mut next = data();
+                                        next.downloads = v;
+                                        data.set(next);
+                                    }
+                                },
                             }
                         },
                         Tab::Accounts => rsx! {

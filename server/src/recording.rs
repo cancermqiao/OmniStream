@@ -323,7 +323,7 @@ fn recording_root_dir() -> PathBuf {
     PathBuf::from("data/recordings")
 }
 
-fn recording_task_dir(task_name: &str) -> PathBuf {
+pub(crate) fn recording_task_dir(task_name: &str) -> PathBuf {
     recording_root_dir().join(sanitize_for_filename(task_name))
 }
 

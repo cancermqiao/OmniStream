@@ -245,3 +245,24 @@ pub async fn save_recording_settings(api_url: &str, settings: &RecordingSettings
         }
     }
 }
+
+pub async fn trigger_manual_upload(api_url: &str, id: &str) -> Result<(), String> {
+    let mut last_err = "request not sent".to_string();
+
+    for base in api_bases(api_url) {
+        let endpoint = join_url(&base, &format!("/downloads/{id}/upload"));
+        match reqwest::Client::new().post(&endpoint).send().await {
+            Ok(resp) => {
+                if resp.status().is_success() {
+                    return Ok(());
+                }
+                last_err = format!("{endpoint} -> status {}", resp.status());
+            }
+            Err(e) => {
+                last_err = format!("{endpoint} -> {e}");
+            }
+        }
+    }
+
+    Err(last_err)
+}

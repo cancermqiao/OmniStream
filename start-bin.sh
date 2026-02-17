@@ -23,6 +23,34 @@ RECORDINGS_DIR="${ROOT_DIR}/data/recordings"
 
 mkdir -p "$PID_DIR" "$ROOT_DIR/data" "$COOKIES_DIR" "$RECORDINGS_DIR"
 
+ensure_not_running() {
+    local name="$1"
+    local pid_file="$2"
+
+    if [ ! -f "$pid_file" ]; then
+        return 0
+    fi
+
+    local pid
+    pid="$(cat "$pid_file" 2>/dev/null || true)"
+    if [ -z "$pid" ]; then
+        rm -f "$pid_file"
+        return 0
+    fi
+
+    if ps -p "$pid" > /dev/null 2>&1; then
+        echo -e "${RED}Error: ${name} is already running (PID: ${pid}).${NC}"
+        echo "Run ./stop.sh first, then retry ./start-bin.sh"
+        exit 1
+    fi
+
+    echo "${name}: stale pid file found, cleaning up (${pid_file})."
+    rm -f "$pid_file"
+}
+
+ensure_not_running "Backend Server" "$SERVER_PID_FILE"
+ensure_not_running "Frontend Web" "$WEB_PID_FILE"
+
 resolve_web_dir() {
     local candidates=(
         "target/dx/app/release/web/public"
@@ -170,18 +198,12 @@ WEB_PID=$!
 echo "$WEB_PID" > "$WEB_PID_FILE"
 echo "Frontend Web PID: $WEB_PID"
 
-echo -e "${BLUE}=== Services Started ===${NC}"
+echo -e "${BLUE}=== Services Started (Detached) ===${NC}"
 echo "Web URL:     http://127.0.0.1:${WEB_PORT}"
 echo "Server API:  http://127.0.0.1:${API_PORT}"
+echo "Server PID:  ${SERVER_PID}"
+echo "Web PID:     ${WEB_PID}"
 echo "Server logs: tail -f server.log"
 echo "Web logs:    tail -f web.log"
-echo "Press Ctrl+C to stop all services."
-
-cleanup() {
-    echo "Stopping services..."
-    kill "$SERVER_PID" "$WEB_PID" 2>/dev/null || true
-    rm -f "$SERVER_PID_FILE" "$WEB_PID_FILE"
-}
-
-trap cleanup INT TERM EXIT
-wait
+echo "Stop all:    ./stop.sh"
+exit 0
