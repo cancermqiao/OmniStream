@@ -10,6 +10,9 @@ pub fn DownloadsPage(
     on_delete: EventHandler<String>,
     on_batch_delete: EventHandler<Vec<String>>,
     on_batch_bind_uploads: EventHandler<(Vec<String>, Vec<String>)>,
+    on_manual_upload: EventHandler<String>,
+    manual_upload_message: Option<String>,
+    manual_upload_error: bool,
 ) -> Element {
     let mut search = use_signal(String::new);
     let mut sort_asc = use_signal(|| true);
@@ -106,6 +109,12 @@ pub fn DownloadsPage(
                         "应用"
                     }
                 }
+                if let Some(msg) = manual_upload_message.clone() {
+                    p {
+                        class: if manual_upload_error { "status status-error" } else { "status" },
+                        "{msg}"
+                    }
+                }
             }
 
             div { class: "card",
@@ -130,6 +139,7 @@ pub fn DownloadsPage(
                                 let d_id = d.id.clone();
                                 let d_id_for_check = d_id.clone();
                                 let d_id_for_delete = d_id.clone();
+                                let d_id_for_manual_upload = d_id.clone();
                                 let checked = selected_ids().contains(&d.id);
                                 let status_label =
                                     d.current_status.clone().unwrap_or_else(|| "未知".to_string());
@@ -166,6 +176,7 @@ pub fn DownloadsPage(
                                         }
                                         td { class: "actions",
                                             button { class: "btn btn-ghost", onclick: move |_| on_edit.call(d_for_edit.clone()), "编辑" }
+                                            button { class: "btn btn-primary", onclick: move |_| on_manual_upload.call(d_id_for_manual_upload.clone()), "手动上传" }
                                             button { class: "btn btn-danger", onclick: move |_| on_delete.call(d_id_for_delete.clone()), "删除" }
                                         }
                                     }

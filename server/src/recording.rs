@@ -4,7 +4,7 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 use std::time::Duration;
 use tokio::process::Command;
-use tokio::time::sleep;
+use tokio::time::{Instant, MissedTickBehavior, interval, sleep};
 
 use crate::{
     checker::STREAMLINK_PATH,
@@ -183,6 +183,9 @@ pub async fn spawn_recorder(
 
             let mut child = command.spawn().expect("failed to spawn streamlink");
             let mut segment_limit_reached = false;
+            let segment_started_at = Instant::now();
+            let mut check_interval = interval(Duration::from_secs(1));
+            check_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
 
             loop {
                 tokio::select! {
@@ -193,13 +196,21 @@ pub async fn spawn_recorder(
                         }
                         break;
                     }
-                    _ = sleep(Duration::from_secs(segment_time_sec.unwrap_or(u64::MAX))), if segment_time_sec.is_some() => {
-                        tracing::info!("Task {} segment time limit reached", task_id);
-                        segment_limit_reached = true;
-                        let _ = child.kill().await;
-                        break;
-                    }
-                    _ = sleep(Duration::from_secs(5)) => {
+                    _ = check_interval.tick() => {
+                        if let Some(limit_sec) = segment_time_sec
+                            && segment_started_at.elapsed() >= Duration::from_secs(limit_sec)
+                        {
+                            tracing::info!(
+                                "Task {} segment time limit reached: elapsed={}s >= {}s",
+                                task_id,
+                                segment_started_at.elapsed().as_secs(),
+                                limit_sec
+                            );
+                            segment_limit_reached = true;
+                            let _ = child.kill().await;
+                            break;
+                        }
+
                         if let Some(limit) = segment_size_bytes
                             && let Ok(meta) = tokio::fs::metadata(&current_filename).await
                             && meta.len() > limit
@@ -258,8 +269,9 @@ pub async fn spawn_recorder(
         }
 
         if !recorded_files.is_empty() {
-            if live_title.is_none() {
-                live_title = state_for_task.checker.fetch_live_title(&url).await;
+            let refreshed_title = state_for_task.checker.fetch_live_title(&url).await;
+            if refreshed_title.is_some() {
+                live_title = refreshed_title;
             }
             let final_task_name = if let Some(task) = state_for_task.tasks.get(&task_id) {
                 task.name.clone()
@@ -323,7 +335,7 @@ fn recording_root_dir() -> PathBuf {
     PathBuf::from("data/recordings")
 }
 
-fn recording_task_dir(task_name: &str) -> PathBuf {
+pub(crate) fn recording_task_dir(task_name: &str) -> PathBuf {
     recording_root_dir().join(sanitize_for_filename(task_name))
 }
 

@@ -23,6 +23,34 @@ RECORDINGS_DIR="${ROOT_DIR}/data/recordings"
 
 mkdir -p "$PID_DIR" "$ROOT_DIR/data" "$COOKIES_DIR" "$RECORDINGS_DIR"
 
+ensure_not_running() {
+    local name="$1"
+    local pid_file="$2"
+
+    if [ ! -f "$pid_file" ]; then
+        return 0
+    fi
+
+    local pid
+    pid="$(cat "$pid_file" 2>/dev/null || true)"
+    if [ -z "$pid" ]; then
+        rm -f "$pid_file"
+        return 0
+    fi
+
+    if ps -p "$pid" > /dev/null 2>&1; then
+        echo -e "${RED}Error: ${name} is already running (PID: ${pid}).${NC}"
+        echo "Run ./stop.sh first, then retry ./start-bin.sh"
+        exit 1
+    fi
+
+    echo "${name}: stale pid file found, cleaning up (${pid_file})."
+    rm -f "$pid_file"
+}
+
+ensure_not_running "Backend Server" "$SERVER_PID_FILE"
+ensure_not_running "Frontend Web" "$WEB_PID_FILE"
+
 resolve_web_dir() {
     local candidates=(
         "target/dx/app/release/web/public"
@@ -85,15 +113,8 @@ if [ ! -x "$SERVER_BIN" ]; then
 fi
 
 # 3. 检查/构建前端编译产物
-if ! resolve_web_dir; then
-    if ! command -v dx &> /dev/null; then
-        echo -e "${RED}Error: web build artifacts not found and dx is not installed.${NC}"
-        echo "Install dioxus-cli first:"
-        echo "  cargo install dioxus-cli"
-        exit 1
-    fi
-
-    echo -e "${GREEN}Web build artifacts not found, building release web assets...${NC}"
+rebuild_web_assets() {
+    echo -e "${GREEN}Building release web assets...${NC}"
     (
         cd web
         dx build --platform web --release
@@ -106,6 +127,61 @@ if ! resolve_web_dir; then
         echo -e "${RED}Error: web index.html still not found after build.${NC}"
         echo "Checked: target/dx/app/release/web/public, target/dx/web/release/web/public, web/dist"
         exit 1
+    fi
+}
+
+web_assets_stale() {
+    local index_html="$1"
+    python3 - "$ROOT_DIR" "$index_html" <<'PYCHK'
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+index_html = Path(sys.argv[2])
+
+if not index_html.exists():
+    print("stale")
+    raise SystemExit(0)
+
+index_mtime = index_html.stat().st_mtime
+watched = [root / "web" / "src", root / "web" / "assets", root / "web" / "Cargo.toml", root / "web" / "Dioxus.toml"]
+
+for path in watched:
+    if not path.exists():
+        continue
+    if path.is_file():
+        if path.stat().st_mtime > index_mtime:
+            print("stale")
+            raise SystemExit(0)
+        continue
+    for f in path.rglob("*"):
+        if f.is_file() and f.stat().st_mtime > index_mtime:
+            print("stale")
+            raise SystemExit(0)
+
+print("fresh")
+PYCHK
+}
+
+if ! resolve_web_dir; then
+    if ! command -v dx &> /dev/null; then
+        echo -e "${RED}Error: web build artifacts not found and dx is not installed.${NC}"
+        echo "Install dioxus-cli first:"
+        echo "  cargo install dioxus-cli"
+        exit 1
+    fi
+    rebuild_web_assets
+else
+    INDEX_HTML="${WEB_DIST_DIR}/index.html"
+    if [ "$(web_assets_stale "$INDEX_HTML")" = "stale" ]; then
+        if ! command -v dx &> /dev/null; then
+            echo -e "${RED}Error: web sources changed but dioxus-cli (dx) is not installed.${NC}"
+            echo "Current assets are stale: ${WEB_DIST_DIR}"
+            echo "Install dioxus-cli and rebuild: cargo install dioxus-cli && (cd web && dx build --platform web --release)"
+            exit 1
+        fi
+        echo -e "${BLUE}Detected stale web assets, rebuilding...${NC}"
+        rebuild_web_assets
     fi
 fi
 
@@ -170,18 +246,12 @@ WEB_PID=$!
 echo "$WEB_PID" > "$WEB_PID_FILE"
 echo "Frontend Web PID: $WEB_PID"
 
-echo -e "${BLUE}=== Services Started ===${NC}"
+echo -e "${BLUE}=== Services Started (Detached) ===${NC}"
 echo "Web URL:     http://127.0.0.1:${WEB_PORT}"
 echo "Server API:  http://127.0.0.1:${API_PORT}"
+echo "Server PID:  ${SERVER_PID}"
+echo "Web PID:     ${WEB_PID}"
 echo "Server logs: tail -f server.log"
 echo "Web logs:    tail -f web.log"
-echo "Press Ctrl+C to stop all services."
-
-cleanup() {
-    echo "Stopping services..."
-    kill "$SERVER_PID" "$WEB_PID" 2>/dev/null || true
-    rm -f "$SERVER_PID_FILE" "$WEB_PID_FILE"
-}
-
-trap cleanup INT TERM EXIT
-wait
+echo "Stop all:    ./stop.sh"
+exit 0
