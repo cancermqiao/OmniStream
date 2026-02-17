@@ -56,6 +56,7 @@ pub fn App() -> Element {
     let snapshot = data();
 
     rsx! {
+        document::Link { rel: "icon", href: "/assets/favicon.svg", r#type: "image/svg+xml" }
         div { class: "app-shell",
             style { "{theme_css()}" }
 

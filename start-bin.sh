@@ -111,6 +111,20 @@ fi
 
 echo "Using web static directory: ${WEB_DIST_DIR}"
 
+# 3.1 确保 favicon 存在并注入到静态 index.html（部分浏览器不会识别运行时注入的 icon）
+FAVICON_SRC="${ROOT_DIR}/web/assets/favicon.svg"
+INDEX_HTML="${WEB_DIST_DIR}/index.html"
+if [ -f "$FAVICON_SRC" ]; then
+    mkdir -p "${WEB_DIST_DIR}/assets"
+    cp -f "$FAVICON_SRC" "${WEB_DIST_DIR}/assets/favicon.svg"
+
+    if [ -f "$INDEX_HTML" ] && ! grep -q 'rel="icon"' "$INDEX_HTML"; then
+        perl -0pi -e 's#</head>#    <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">\n    <link rel="shortcut icon" href="/assets/favicon.svg">\n</head>#s' "$INDEX_HTML"
+    fi
+else
+    echo -e "${RED}Warning: favicon source not found: ${FAVICON_SRC}${NC}"
+fi
+
 # 4. 启动后端
 echo -e "${GREEN}Starting Backend Server Binary...${NC}"
 BILIUP_DB_PATH="$DB_FILE" BILIUP_COOKIES_DIR="$COOKIES_DIR" BILIUP_RECORDINGS_DIR="$RECORDINGS_DIR" nohup "$SERVER_BIN" > server.log 2>&1 &
