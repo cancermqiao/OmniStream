@@ -11,6 +11,8 @@ pub fn DownloadsPage(
     on_batch_delete: EventHandler<Vec<String>>,
     on_batch_bind_uploads: EventHandler<(Vec<String>, Vec<String>)>,
     on_manual_upload: EventHandler<String>,
+    manual_upload_message: Option<String>,
+    manual_upload_error: bool,
 ) -> Element {
     let mut search = use_signal(String::new);
     let mut sort_asc = use_signal(|| true);
@@ -105,6 +107,12 @@ pub fn DownloadsPage(
                             selected_ids.set(vec![]);
                         },
                         "应用"
+                    }
+                }
+                if let Some(msg) = manual_upload_message.clone() {
+                    p {
+                        class: if manual_upload_error { "status status-error" } else { "status" },
+                        "{msg}"
                     }
                 }
             }

@@ -42,6 +42,8 @@ pub async fn trigger_manual_upload(
     Path(id): Path<String>,
     State(state): State<SharedState>,
 ) -> (StatusCode, String) {
+    tracing::info!("Manual upload request received, download_id={}", id);
+
     let downloads = match state.db.get_downloads().await {
         Ok(v) => v,
         Err(e) => {
@@ -51,10 +53,19 @@ pub async fn trigger_manual_upload(
     };
 
     let Some(download) = downloads.into_iter().find(|d| d.id == id) else {
+        tracing::warn!("Manual upload rejected: download config not found, id={}", id);
         return (StatusCode::NOT_FOUND, "download config not found".to_string());
     };
 
+    tracing::info!(
+        "Manual upload target resolved: id={}, name={}, url={}",
+        download.id,
+        download.name,
+        download.url
+    );
+
     if download.linked_upload_ids.is_empty() {
+        tracing::warn!("Manual upload rejected: no linked upload templates, id={}", download.id);
         return (StatusCode::BAD_REQUEST, "no linked upload templates".to_string());
     }
 
@@ -74,6 +85,10 @@ pub async fn trigger_manual_upload(
         .collect();
 
     if upload_configs.is_empty() {
+        tracing::warn!(
+            "Manual upload rejected: linked templates missing in DB, id={}",
+            download.id
+        );
         return (StatusCode::BAD_REQUEST, "linked upload templates are missing".to_string());
     }
 
@@ -123,6 +138,13 @@ pub async fn trigger_manual_upload(
 
     files.sort();
 
+    tracing::info!(
+        "Manual upload file scan done: task={}, dir={}, file_count={}",
+        download.name,
+        task_dir.display(),
+        files.len()
+    );
+
     if files.is_empty() {
         return (
             StatusCode::BAD_REQUEST,
@@ -138,10 +160,19 @@ pub async fn trigger_manual_upload(
         state.recording_settings.read().await.auto_cleanup_after_upload
     };
 
+    let manual_task_id = format!("manual-upload-{}", Uuid::new_v4());
+    tracing::info!(
+        "Manual upload accepted: manual_task_id={}, task_name={}, files={}, upload_configs={}",
+        manual_task_id,
+        task_name,
+        files.len(),
+        upload_configs.len()
+    );
+
     let state_for_upload = state.clone();
     tokio::spawn(async move {
         recording::run_upload(
-            format!("manual-upload-{}", Uuid::new_v4()),
+            manual_task_id,
             files,
             state_for_upload,
             false,

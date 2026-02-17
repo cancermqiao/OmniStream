@@ -21,6 +21,8 @@ pub fn App() -> Element {
 
     let mut qr_session = use_signal::<Option<QrStartResponse>>(|| None);
     let mut qr_message = use_signal::<Option<String>>(|| None);
+    let mut manual_upload_message = use_signal::<Option<String>>(|| None);
+    let mut manual_upload_error = use_signal(|| false);
 
     use_future(move || async move {
         let mut account_tick = 0u8;
@@ -127,16 +129,30 @@ pub fn App() -> Element {
                                     }
                                 },
                                 on_manual_upload: move |id: String| async move {
-                                    if let Err(e) = api::trigger_manual_upload(api_url, &id).await {
-                                        #[cfg(target_arch = "wasm32")]
-                                        web_sys::console::error_1(&format!("manual upload failed: {e}").into());
+                                    manual_upload_message.set(Some("正在触发手动上传...".to_string()));
+                                    manual_upload_error.set(false);
+
+                                    match api::trigger_manual_upload(api_url, &id).await {
+                                        Ok(msg) => {
+                                            manual_upload_message.set(Some(format!("手动上传已触发：{msg}")));
+                                            manual_upload_error.set(false);
+                                        }
+                                        Err(e) => {
+                                            manual_upload_message.set(Some(format!("手动上传触发失败：{e}")));
+                                            manual_upload_error.set(true);
+                                            #[cfg(target_arch = "wasm32")]
+                                            web_sys::console::error_1(&format!("manual upload failed: {e}").into());
+                                        }
                                     }
+
                                     if let Some(v) = api::fetch_downloads(api_url).await {
                                         let mut next = data();
                                         next.downloads = v;
                                         data.set(next);
                                     }
                                 },
+                                manual_upload_message: manual_upload_message(),
+                                manual_upload_error: manual_upload_error(),
                             }
                         },
                         Tab::Accounts => rsx! {
