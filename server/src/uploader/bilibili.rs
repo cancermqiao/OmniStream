@@ -121,6 +121,14 @@ impl Uploader for BilibiliUploader {
                 videos[0].title.clone().unwrap_or_else(|| "Uploaded by OmniStream".to_string())
             });
 
+        tracing::info!(
+            "Resolved upload title: template={:?}, live_title={:?}, task_name={:?}, final_title={:?}",
+            config.title,
+            live_title,
+            task_name,
+            title
+        );
+
         // Tag 必须非空，如果 config 中没有，使用 "omnistream"
         let tag =
             if config.tags.is_empty() { "omnistream".to_string() } else { config.tags.join(",") };
