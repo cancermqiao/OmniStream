@@ -40,6 +40,30 @@ impl BilibiliUploader {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::BilibiliUploader;
+
+    #[test]
+    fn render_title_uses_live_title_placeholder() {
+        let rendered = BilibiliUploader::render_title("{title} 录播", Some("开整"), "任务名");
+        assert!(rendered.starts_with("开整 录播"));
+    }
+
+    #[test]
+    fn render_title_falls_back_to_task_name_when_live_title_is_blank() {
+        let rendered = BilibiliUploader::render_title("{title} 录播", Some("   "), "任务名");
+        assert!(rendered.starts_with("任务名 录播"));
+    }
+
+    #[test]
+    fn render_title_applies_time_placeholders() {
+        let rendered = BilibiliUploader::render_title("{title}-%Y", Some("开整"), "任务名");
+        assert!(rendered.starts_with("开整-"));
+        assert_eq!(rendered.len(), "开整-2026".len());
+    }
+}
+
 #[async_trait]
 impl Uploader for BilibiliUploader {
     async fn upload(

@@ -4,6 +4,7 @@ use axum::{
     http::StatusCode,
 };
 use shared::{DownloadConfig, TaskStatus, UploadConfig};
+use std::path::Path as FsPath;
 use uuid::Uuid;
 
 use crate::{recording, state::SharedState};
@@ -93,50 +94,23 @@ pub async fn trigger_manual_upload(
     }
 
     let task_dir = recording::recording_task_dir(&download.name);
-    let mut files = Vec::new();
-
-    let mut entries = match tokio::fs::read_dir(&task_dir).await {
-        Ok(v) => v,
-        Err(e) => {
-            tracing::error!("Failed to open recording dir {}: {}", task_dir.display(), e);
+    let files = match scan_recording_files(&task_dir).await {
+        Ok(files) => files,
+        Err(ScanRecordingFilesError::NotFound(message)) => {
+            tracing::error!("Failed to open recording dir {}: {}", task_dir.display(), message);
             return (
                 StatusCode::NOT_FOUND,
                 format!("recording directory not found: {}", task_dir.display()),
             );
         }
-    };
-
-    loop {
-        match entries.next_entry().await {
-            Ok(Some(entry)) => {
-                let path = entry.path();
-                let ext = path
-                    .extension()
-                    .and_then(|e| e.to_str())
-                    .map(|e| e.to_ascii_lowercase())
-                    .unwrap_or_default();
-                let allow = matches!(ext.as_str(), "mp4" | "flv" | "mkv" | "ts");
-                if !allow {
-                    continue;
-                }
-                if let Ok(meta) = entry.metadata().await
-                    && meta.is_file()
-                {
-                    files.push(path.to_string_lossy().to_string());
-                }
-            }
-            Ok(None) => break,
-            Err(e) => {
-                tracing::error!("Failed to read recording dir {}: {}", task_dir.display(), e);
-                return (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "failed to scan recording files".to_string(),
-                );
-            }
+        Err(ScanRecordingFilesError::ReadFailed(message)) => {
+            tracing::error!("Failed to read recording dir {}: {}", task_dir.display(), message);
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "failed to scan recording files".to_string(),
+            );
         }
-    }
-
-    files.sort();
+    };
 
     tracing::info!(
         "Manual upload file scan done: task={}, dir={}, file_count={}",
@@ -188,15 +162,26 @@ pub async fn trigger_manual_upload(
 }
 
 fn resolve_download_status(state: &SharedState, url: &str) -> String {
-    let mut has_error = false;
-    let mut has_completed = false;
-    let mut has_stopped = false;
+    let mut statuses = Vec::new();
+    let is_checking = state.checking_urls.contains_key(url);
 
     for task in state.tasks.iter() {
         if task.value().url != url {
             continue;
         }
-        match &task.value().status {
+        statuses.push(task.value().status.clone());
+    }
+
+    status_label_for_tasks(&statuses, is_checking)
+}
+
+fn status_label_for_tasks(statuses: &[TaskStatus], is_checking: bool) -> String {
+    let mut has_error = false;
+    let mut has_completed = false;
+    let mut has_stopped = false;
+
+    for status in statuses {
+        match status {
             TaskStatus::Recording => return "下载中".to_string(),
             TaskStatus::Uploading => return "上传中".to_string(),
             TaskStatus::Error(_) => has_error = true,
@@ -206,7 +191,7 @@ fn resolve_download_status(state: &SharedState, url: &str) -> String {
         }
     }
 
-    if state.checking_urls.contains_key(url) {
+    if is_checking {
         return "检测中".to_string();
     }
     if has_error {
@@ -230,4 +215,101 @@ pub async fn delete_download(
         return StatusCode::INTERNAL_SERVER_ERROR;
     }
     StatusCode::OK
+}
+
+#[derive(Debug)]
+enum ScanRecordingFilesError {
+    NotFound(String),
+    ReadFailed(String),
+}
+
+fn is_recording_file(path: &FsPath) -> bool {
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_ascii_lowercase())
+        .unwrap_or_default();
+    matches!(ext.as_str(), "mp4" | "flv" | "mkv" | "ts")
+}
+
+async fn scan_recording_files(task_dir: &FsPath) -> Result<Vec<String>, ScanRecordingFilesError> {
+    let mut files = Vec::new();
+    let mut entries = tokio::fs::read_dir(task_dir)
+        .await
+        .map_err(|e| ScanRecordingFilesError::NotFound(e.to_string()))?;
+
+    loop {
+        match entries.next_entry().await {
+            Ok(Some(entry)) => {
+                let path = entry.path();
+                if !is_recording_file(&path) {
+                    continue;
+                }
+                if let Ok(meta) = entry.metadata().await
+                    && meta.is_file()
+                {
+                    files.push(path.to_string_lossy().to_string());
+                }
+            }
+            Ok(None) => break,
+            Err(e) => return Err(ScanRecordingFilesError::ReadFailed(e.to_string())),
+        }
+    }
+
+    files.sort();
+    Ok(files)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{is_recording_file, scan_recording_files, status_label_for_tasks};
+    use shared::TaskStatus;
+    use std::path::Path as FsPath;
+    use uuid::Uuid;
+
+    #[test]
+    fn recording_file_filter_accepts_supported_extensions_case_insensitively() {
+        assert!(is_recording_file(FsPath::new("a.mp4")));
+        assert!(is_recording_file(FsPath::new("a.MKV")));
+        assert!(is_recording_file(FsPath::new("a.ts")));
+        assert!(is_recording_file(FsPath::new("a.flv")));
+        assert!(!is_recording_file(FsPath::new("a.txt")));
+        assert!(!is_recording_file(FsPath::new("a")));
+    }
+
+    #[tokio::test]
+    async fn scan_recording_files_returns_only_supported_files_sorted() {
+        let dir = std::env::temp_dir().join(format!("omnistream-scan-{}", Uuid::new_v4()));
+        tokio::fs::create_dir_all(&dir).await.expect("create temp dir");
+        tokio::fs::write(dir.join("b.mp4"), b"x").await.expect("write mp4");
+        tokio::fs::write(dir.join("a.MKV"), b"x").await.expect("write mkv");
+        tokio::fs::write(dir.join("c.txt"), b"x").await.expect("write txt");
+        tokio::fs::create_dir(dir.join("nested.ts")).await.expect("create nested dir");
+
+        let files = scan_recording_files(&dir).await.expect("scan files");
+
+        assert_eq!(files.len(), 2);
+        assert!(files[0].ends_with("a.MKV"));
+        assert!(files[1].ends_with("b.mp4"));
+
+        tokio::fs::remove_dir_all(&dir).await.expect("cleanup temp dir");
+    }
+
+    #[test]
+    fn status_label_prioritizes_active_states() {
+        let statuses = vec![TaskStatus::Completed, TaskStatus::Recording];
+        assert_eq!(status_label_for_tasks(&statuses, false), "下载中");
+
+        let statuses = vec![TaskStatus::Stopped, TaskStatus::Uploading];
+        assert_eq!(status_label_for_tasks(&statuses, false), "上传中");
+    }
+
+    #[test]
+    fn status_label_maps_terminal_states_and_checking() {
+        assert_eq!(status_label_for_tasks(&[], true), "检测中");
+        assert_eq!(status_label_for_tasks(&[TaskStatus::Error("x".to_string())], false), "失败");
+        assert_eq!(status_label_for_tasks(&[TaskStatus::Completed], false), "已完成");
+        assert_eq!(status_label_for_tasks(&[TaskStatus::Stopped], false), "已停止");
+        assert_eq!(status_label_for_tasks(&[TaskStatus::Idle], false), "空闲");
+    }
 }

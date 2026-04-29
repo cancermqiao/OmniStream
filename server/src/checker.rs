@@ -217,3 +217,78 @@ fn extract_room_title_attr(html: &str) -> Option<String> {
         .ok()?;
     Some(regex.captures(html)?.get(1)?.as_str().trim().to_string())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        classify_streamlink_error, extract_json_assignment, extract_non_empty_json_string,
+        extract_room_title_attr, extract_title, is_huya_url,
+    };
+    use serde_json::json;
+
+    #[test]
+    fn extract_title_prefers_metadata_title() {
+        let value = json!({
+            "metadata": { "title": "开整" },
+            "title": "后备标题"
+        });
+        assert_eq!(extract_title(&value), Some("开整".to_string()));
+    }
+
+    #[test]
+    fn extract_title_falls_back_to_top_level_title() {
+        let value = json!({ "title": "开整" });
+        assert_eq!(extract_title(&value), Some("开整".to_string()));
+    }
+
+    #[test]
+    fn extract_title_rejects_blank_values() {
+        let value = json!({
+            "metadata": { "title": "   " },
+            "title": ""
+        });
+        assert_eq!(extract_title(&value), None);
+    }
+
+    #[test]
+    fn classify_streamlink_error_treats_offline_messages_as_false() {
+        assert!(!classify_streamlink_error("No playable streams found").expect("offline result"));
+        assert!(classify_streamlink_error("timeout talking to upstream").is_err());
+    }
+
+    #[test]
+    fn huya_helpers_extract_expected_fields() {
+        let html = r#"
+            <script>
+                var TT_ROOM_DATA = {"introduction":"开整"};
+                var hyPlayerConfig = {"stream":{"data":[{"gameLiveInfo":{"introduction":"备用标题"}}]}};
+            </script>
+            <h2 id="J_roomTitle" title="页面标题"></h2>
+        "#;
+
+        let tt_room = extract_json_assignment(html, "TT_ROOM_DATA").expect("tt room data");
+        assert_eq!(
+            extract_non_empty_json_string(&tt_room, &["introduction"]),
+            Some("开整".to_string())
+        );
+
+        let player = extract_json_assignment(html, "hyPlayerConfig").expect("player config");
+        assert_eq!(
+            extract_non_empty_json_string(
+                &player,
+                &["stream", "data", "0", "gameLiveInfo", "introduction"]
+            ),
+            Some("备用标题".to_string())
+        );
+
+        assert_eq!(extract_room_title_attr(html), Some("页面标题".to_string()));
+    }
+
+    #[test]
+    fn detects_huya_urls() {
+        assert!(is_huya_url("https://www.huya.com/211888"));
+        assert!(is_huya_url("https://huya.com/211888"));
+        assert!(!is_huya_url("https://www.douyu.com/211888"));
+        assert!(!is_huya_url("not-a-url"));
+    }
+}
