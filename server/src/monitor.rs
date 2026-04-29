@@ -66,7 +66,14 @@ pub async fn run_monitor(state: SharedState) {
                         } else {
                             None
                         };
-                        state.tasks.insert(task_id.clone(), task);
+                        state.tasks.insert(task_id.clone(), task.clone());
+                        if let Err(e) = state.db.save_task(&task).await {
+                            tracing::error!(
+                                "Failed to persist monitor-created task, task_id={}: {}",
+                                task_id,
+                                e
+                            );
+                        }
                         spawn_recorder(
                             task_id,
                             download.url.clone(),

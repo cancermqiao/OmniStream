@@ -5,6 +5,7 @@ pub enum TaskStatus {
     Idle,          // 空闲/未开始
     Recording,     // 录制中
     Uploading,     // 上传中
+    Stopped,       // 已手动停止
     Completed,     // 已完成
     Error(String), // 失败
 }
@@ -155,7 +156,7 @@ pub trait StreamChecker: Send + Sync {
 
 #[cfg(test)]
 mod tests {
-    use super::UploadConfig;
+    use super::{TaskStatus, UploadConfig};
 
     #[test]
     fn upload_config_default_values_are_stable() {
@@ -174,5 +175,11 @@ mod tests {
         let json = "{}";
         let config: UploadConfig = serde_json::from_str(json).expect("valid upload config json");
         assert_eq!(config, UploadConfig::default());
+    }
+
+    #[test]
+    fn task_status_stopped_serializes_stably() {
+        let json = serde_json::to_string(&TaskStatus::Stopped).expect("serialize stopped status");
+        assert_eq!(json, "\"Stopped\"");
     }
 }

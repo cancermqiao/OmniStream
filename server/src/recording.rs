@@ -12,6 +12,46 @@ use crate::{
     uploader::UploadTarget,
 };
 
+async fn persist_task_status(state: &SharedState, task_id: &str, status: &TaskStatus) {
+    if let Err(e) = state.db.update_status(task_id, status).await {
+        tracing::error!(
+            "Failed to persist task status, task_id={}, status={:?}: {}",
+            task_id,
+            status,
+            e
+        );
+    }
+}
+
+async fn persist_task_filename(state: &SharedState, task_id: &str, filename: &str) {
+    if let Err(e) = state.db.update_filename(task_id, filename).await {
+        tracing::error!(
+            "Failed to persist task filename, task_id={}, filename={}: {}",
+            task_id,
+            filename,
+            e
+        );
+    }
+}
+
+async fn set_task_status(state: &SharedState, task_id: &str, status: TaskStatus) {
+    if let Some(mut task) = state.tasks.get_mut(task_id) {
+        task.status = status.clone();
+    }
+    persist_task_status(state, task_id, &status).await;
+}
+
+async fn set_task_filename(state: &SharedState, task_id: &str, filename: &str) {
+    if let Some(mut task) = state.tasks.get_mut(task_id) {
+        task.filename = filename.to_string();
+    }
+    persist_task_filename(state, task_id, filename).await;
+}
+
+fn clear_task_handle(state: &SharedState, task_id: &str) {
+    state.handles.remove(task_id);
+}
+
 pub async fn run_upload(
     task_id: String,
     filenames: Vec<String>,
@@ -29,11 +69,8 @@ pub async fn run_upload(
     if configs.is_empty() {
         tracing::info!("Task {} has no upload configs, skipping upload", task_id);
         if update_status {
-            if let Some(mut task) = state.tasks.get_mut(&task_id) {
-                task.status = TaskStatus::Completed;
-            }
-            let _ = state.db.update_status(&task_id, &TaskStatus::Completed).await;
-            state.handles.remove(&task_id);
+            set_task_status(&state, &task_id, TaskStatus::Completed).await;
+            clear_task_handle(&state, &task_id);
         }
         return;
     }
@@ -91,14 +128,8 @@ pub async fn run_upload(
     }
 
     if update_status {
-        if let Some(mut task) = state.tasks.get_mut(&task_id) {
-            task.status = final_status.clone();
-        }
-        let _ = state.db.update_status(&task_id, &final_status).await;
-    }
-
-    if update_status {
-        state.handles.remove(&task_id);
+        set_task_status(&state, &task_id, final_status).await;
+        clear_task_handle(&state, &task_id);
     }
 }
 
@@ -137,14 +168,12 @@ pub async fn spawn_recorder(
     let handle = tokio::spawn(async move {
         tracing::info!("Task {} preparing to record: {}", task_id, url);
 
-        if let Some(mut task) = state_for_task.tasks.get_mut(&task_id) {
-            task.status = TaskStatus::Recording;
-        }
-        let _ = state_for_task.db.update_status(&task_id, &TaskStatus::Recording).await;
+        set_task_status(&state_for_task, &task_id, TaskStatus::Recording).await;
 
         let mut recorded_files = Vec::new();
         let mut live_title = state_for_task.checker.fetch_live_title(&url).await;
         let mut consecutive_empty_segments = 0u8;
+        let mut terminal_error: Option<String> = None;
 
         loop {
             let task_name = if let Some(task) = state_for_task.tasks.get(&task_id) {
@@ -171,9 +200,7 @@ pub async fn spawn_recorder(
             );
             let current_filename = task_dir.join(basename).to_string_lossy().to_string();
 
-            if let Some(mut task) = state_for_task.tasks.get_mut(&task_id) {
-                task.filename = current_filename.clone();
-            }
+            set_task_filename(&state_for_task, &task_id, &current_filename).await;
 
             tracing::info!("Task {} starting segment: {}", task_id, current_filename);
 
@@ -181,7 +208,15 @@ pub async fn spawn_recorder(
             command.arg("-o").arg(&current_filename).arg(&url).arg(&quality);
             command.kill_on_drop(true);
 
-            let mut child = command.spawn().expect("failed to spawn streamlink");
+            let mut child = match command.spawn() {
+                Ok(child) => child,
+                Err(e) => {
+                    let message = format!("Failed to spawn streamlink: {}", e);
+                    tracing::error!("Task {} {}", task_id, message);
+                    terminal_error = Some(message);
+                    break;
+                }
+            };
             let mut segment_limit_reached = false;
             let segment_started_at = Instant::now();
             let mut check_interval = interval(Duration::from_secs(1));
@@ -207,7 +242,13 @@ pub async fn spawn_recorder(
                                 limit_sec
                             );
                             segment_limit_reached = true;
-                            let _ = child.kill().await;
+                            if let Err(e) = child.kill().await {
+                                tracing::warn!(
+                                    "Task {} failed to kill streamlink after time split: {}",
+                                    task_id,
+                                    e
+                                );
+                            }
                             break;
                         }
 
@@ -217,7 +258,13 @@ pub async fn spawn_recorder(
                         {
                             tracing::info!("Task {} segment size limit reached: {} > {}", task_id, meta.len(), limit);
                             segment_limit_reached = true;
-                            let _ = child.kill().await;
+                            if let Err(e) = child.kill().await {
+                                tracing::warn!(
+                                    "Task {} failed to kill streamlink after size split: {}",
+                                    task_id,
+                                    e
+                                );
+                            }
                             break;
                         }
                     }
@@ -290,15 +337,10 @@ pub async fn spawn_recorder(
             )
             .await;
         } else {
-            if let Some(mut task) = state_for_task.tasks.get_mut(&task_id) {
-                task.status = TaskStatus::Error("No files generated".to_string());
-            }
-            let _ = state_for_task
-                .db
-                .update_status(&task_id, &TaskStatus::Error("No files generated".to_string()))
-                .await;
-
-            state_for_task.handles.remove(&task_id);
+            let error_message =
+                terminal_error.unwrap_or_else(|| "No files generated".to_string());
+            set_task_status(&state_for_task, &task_id, TaskStatus::Error(error_message)).await;
+            clear_task_handle(&state_for_task, &task_id);
         }
     });
 

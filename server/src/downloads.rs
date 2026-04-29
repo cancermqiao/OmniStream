@@ -190,6 +190,7 @@ pub async fn trigger_manual_upload(
 fn resolve_download_status(state: &SharedState, url: &str) -> String {
     let mut has_error = false;
     let mut has_completed = false;
+    let mut has_stopped = false;
 
     for task in state.tasks.iter() {
         if task.value().url != url {
@@ -200,6 +201,7 @@ fn resolve_download_status(state: &SharedState, url: &str) -> String {
             TaskStatus::Uploading => return "上传中".to_string(),
             TaskStatus::Error(_) => has_error = true,
             TaskStatus::Completed => has_completed = true,
+            TaskStatus::Stopped => has_stopped = true,
             TaskStatus::Idle => {}
         }
     }
@@ -212,6 +214,9 @@ fn resolve_download_status(state: &SharedState, url: &str) -> String {
     }
     if has_completed {
         return "已完成".to_string();
+    }
+    if has_stopped {
+        return "已停止".to_string();
     }
     "空闲".to_string()
 }

@@ -49,14 +49,38 @@ impl StreamlinkChecker {
     }
 
     pub async fn fetch_live_title(&self, url: &str) -> Option<String> {
-        let output = Command::new(STREAMLINK_PATH).arg("--json").arg(url).output().await.ok()?;
+        let output = match Command::new(STREAMLINK_PATH).arg("--json").arg(url).output().await {
+            Ok(output) => output,
+            Err(e) => {
+                tracing::warn!("Failed to run streamlink for live title lookup, url={}: {}", url, e);
+                return fetch_huya_live_title(url).await;
+            }
+        };
 
         let stdout = String::from_utf8_lossy(&output.stdout);
         if stdout.trim().is_empty() {
+            if !output.status.success() {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                tracing::warn!(
+                    "Streamlink returned empty stdout during live title lookup, url={}, stderr={}",
+                    url,
+                    stderr.trim()
+                );
+            }
             return fetch_huya_live_title(url).await;
         }
 
-        let json: Value = serde_json::from_str(&stdout).ok()?;
+        let json: Value = match serde_json::from_str(&stdout) {
+            Ok(json) => json,
+            Err(e) => {
+                tracing::warn!(
+                    "Failed to parse streamlink JSON during live title lookup, url={}: {}",
+                    url,
+                    e
+                );
+                return fetch_huya_live_title(url).await;
+            }
+        };
         let title = extract_title(&json);
         if title.is_some() {
             return title;
@@ -110,9 +134,29 @@ async fn fetch_huya_live_title(url: &str) -> Option<String> {
              (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36",
         )
         .build()
+        .map_err(|e| {
+            tracing::warn!("Failed to build Huya title lookup HTTP client, url={}: {}", url, e);
+            e
+        })
         .ok()?;
 
-    let html = client.get(url).send().await.ok()?.text().await.ok()?;
+    let response = client
+        .get(url)
+        .send()
+        .await
+        .map_err(|e| {
+            tracing::warn!("Failed to fetch Huya room HTML for title lookup, url={}: {}", url, e);
+            e
+        })
+        .ok()?;
+    let html = response
+        .text()
+        .await
+        .map_err(|e| {
+            tracing::warn!("Failed to read Huya room HTML for title lookup, url={}: {}", url, e);
+            e
+        })
+        .ok()?;
 
     extract_json_assignment(&html, "TT_ROOM_DATA")
         .and_then(|value| extract_non_empty_json_string(&value, &["introduction"]))
@@ -136,9 +180,19 @@ fn is_huya_url(url: &str) -> bool {
 
 fn extract_json_assignment(html: &str, variable: &str) -> Option<Value> {
     let pattern = format!(r#"var\s+{}\s*=\s*(\{{.*?\}});"#, regex::escape(variable));
-    let regex = Regex::new(&pattern).ok()?;
+    let regex = Regex::new(&pattern)
+        .map_err(|e| {
+            tracing::error!("Failed to compile regex for {} extraction: {}", variable, e);
+            e
+        })
+        .ok()?;
     let json = regex.captures(html)?.get(1)?.as_str();
-    serde_json::from_str(json).ok()
+    serde_json::from_str(json)
+        .map_err(|e| {
+            tracing::warn!("Failed to parse embedded JSON for {}: {}", variable, e);
+            e
+        })
+        .ok()
 }
 
 fn extract_non_empty_json_string(value: &Value, path: &[&str]) -> Option<String> {
@@ -155,6 +209,11 @@ fn extract_non_empty_json_string(value: &Value, path: &[&str]) -> Option<String>
 }
 
 fn extract_room_title_attr(html: &str) -> Option<String> {
-    let regex = Regex::new(r#"id="J_roomTitle"[^>]*title="([^"]+)""#).ok()?;
+    let regex = Regex::new(r#"id="J_roomTitle"[^>]*title="([^"]+)""#)
+        .map_err(|e| {
+            tracing::error!("Failed to compile room title regex: {}", e);
+            e
+        })
+        .ok()?;
     Some(regex.captures(html)?.get(1)?.as_str().trim().to_string())
 }
