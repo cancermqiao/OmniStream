@@ -4,9 +4,11 @@ use axum::{
     http::StatusCode,
 };
 use shared::{CreateTaskRequest, StreamTask, TaskStatus};
-use uuid::Uuid;
 
-use crate::{recording::spawn_recorder, state::SharedState};
+use crate::{
+    state::SharedState,
+    task_launcher::{LaunchTaskParams, launch_recording_task},
+};
 
 pub async fn list_tasks(State(state): State<SharedState>) -> Json<Vec<StreamTask>> {
     if state.tasks.is_empty() {
@@ -30,23 +32,17 @@ pub async fn add_task(
     State(state): State<SharedState>,
     Json(payload): Json<CreateTaskRequest>,
 ) -> Json<StreamTask> {
-    let task_id = Uuid::new_v4().to_string();
-    let filename = format!("{}.mp4", task_id);
-
-    let task = StreamTask {
-        id: task_id.clone(),
-        name: payload.name,
-        url: payload.url.clone(),
-        status: TaskStatus::Idle,
-        filename: filename.clone(),
-        upload_configs: vec![],
-    };
-
-    state.tasks.insert(task_id.clone(), task.clone());
-    if let Err(e) = state.db.save_task(&task).await {
-        tracing::error!("Failed to persist newly created task, task_id={}: {}", task_id, e);
-    }
-    spawn_recorder(task_id, payload.url, filename, state.clone(), None).await;
+    let task = launch_recording_task(
+        state.clone(),
+        LaunchTaskParams {
+            initial_filename: "pending.mp4".to_string(),
+            name: payload.name,
+            url: payload.url,
+            upload_configs: vec![],
+            custom_recording_settings: None,
+        },
+    )
+    .await;
     Json(task)
 }
 

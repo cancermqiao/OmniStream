@@ -1,7 +1,9 @@
 use shared::{TaskStatus, UploadConfig};
-use uuid::Uuid;
 
-use crate::{recording::spawn_recorder, state::SharedState};
+use crate::{
+    state::SharedState,
+    task_launcher::{LaunchTaskParams, launch_recording_task},
+};
 
 pub async fn run_monitor(state: SharedState) {
     let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(60));
@@ -40,8 +42,6 @@ pub async fn run_monitor(state: SharedState) {
                 Ok(is_live) => {
                     if is_live {
                         tracing::info!("Streamer {} is live, starting recording", download.name);
-                        let task_id = Uuid::new_v4().to_string();
-                        let filename = format!("{}-{}.mp4", download.name, task_id);
 
                         let upload_configs: Vec<UploadConfig> = download
                             .linked_upload_ids
@@ -50,38 +50,25 @@ pub async fn run_monitor(state: SharedState) {
                             .map(|u| u.config.clone())
                             .collect();
 
-                        let task = shared::StreamTask {
-                            id: task_id.clone(),
-                            name: download.name.clone(),
-                            url: download.url.clone(),
-                            status: TaskStatus::Idle,
-                            filename: filename.clone(),
-                            upload_configs,
-                        };
-
-                        tracing::info!("task info: {:?}", task);
-
                         let custom_recording_settings = if download.use_custom_recording_settings {
                             download.recording_settings.clone()
                         } else {
                             None
                         };
-                        state.tasks.insert(task_id.clone(), task.clone());
-                        if let Err(e) = state.db.save_task(&task).await {
-                            tracing::error!(
-                                "Failed to persist monitor-created task, task_id={}: {}",
-                                task_id,
-                                e
-                            );
-                        }
-                        spawn_recorder(
-                            task_id,
-                            download.url.clone(),
-                            filename,
+                        let initial_filename = format!("{}-pending.mp4", download.name);
+                        let task = launch_recording_task(
                             state.clone(),
-                            custom_recording_settings,
+                            LaunchTaskParams {
+                                initial_filename,
+                                name: download.name.clone(),
+                                url: download.url.clone(),
+                                upload_configs,
+                                custom_recording_settings,
+                            },
                         )
                         .await;
+
+                        tracing::info!("task info: {:?}", task);
                     }
                 }
                 Err(e) => {

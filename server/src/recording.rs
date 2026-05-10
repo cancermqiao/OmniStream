@@ -1,55 +1,47 @@
+mod runtime;
+mod segment;
+mod task_state;
+
 use chrono::Local;
 use shared::{TaskStatus, UploadConfig};
 use std::collections::HashSet;
 use std::path::PathBuf;
-use std::time::Duration;
-use tokio::process::Command;
-use tokio::time::{Instant, MissedTickBehavior, interval, sleep};
 
+use self::runtime::{RecorderRuntimeConfig, build_runtime_config};
+use self::segment::{
+    SegmentLoopAction, decide_next_segment_action, record_segment, update_recorded_files,
+};
+use self::task_state::{
+    clear_task_handle, finish_recording_without_files, resolve_task_name, set_task_filename,
+    set_task_status,
+};
 use crate::{
-    checker::STREAMLINK_PATH,
     state::{RecorderHandle, SharedState},
     uploader::UploadTarget,
 };
 
-async fn persist_task_status(state: &SharedState, task_id: &str, status: &TaskStatus) {
-    if let Err(e) = state.db.update_status(task_id, status).await {
-        tracing::error!(
-            "Failed to persist task status, task_id={}, status={:?}: {}",
-            task_id,
-            status,
-            e
-        );
-    }
+async fn prepare_segment_file(
+    state: &SharedState,
+    task_id: &str,
+) -> Result<String, std::io::Error> {
+    let task_name = resolve_task_name(state, task_id);
+    let task_dir = recording_task_dir(&task_name);
+    tokio::fs::create_dir_all(&task_dir).await?;
+
+    let basename = format!(
+        "{}-{}.mp4",
+        sanitize_for_filename(&task_name),
+        Local::now().format("%Y%m%d_%H%M%S")
+    );
+    let current_filename = task_dir.join(basename).to_string_lossy().to_string();
+    set_task_filename(state, task_id, &current_filename).await;
+    Ok(current_filename)
 }
 
-async fn persist_task_filename(state: &SharedState, task_id: &str, filename: &str) {
-    if let Err(e) = state.db.update_filename(task_id, filename).await {
-        tracing::error!(
-            "Failed to persist task filename, task_id={}, filename={}: {}",
-            task_id,
-            filename,
-            e
-        );
+async fn stop_segment_process(child: &mut tokio::process::Child, task_id: &str, reason: &str) {
+    if let Err(e) = child.kill().await {
+        tracing::warn!("Task {} failed to kill streamlink after {}: {}", task_id, reason, e);
     }
-}
-
-async fn set_task_status(state: &SharedState, task_id: &str, status: TaskStatus) {
-    if let Some(mut task) = state.tasks.get_mut(task_id) {
-        task.status = status.clone();
-    }
-    persist_task_status(state, task_id, &status).await;
-}
-
-async fn set_task_filename(state: &SharedState, task_id: &str, filename: &str) {
-    if let Some(mut task) = state.tasks.get_mut(task_id) {
-        task.filename = filename.to_string();
-    }
-    persist_task_filename(state, task_id, filename).await;
-}
-
-fn clear_task_handle(state: &SharedState, task_id: &str) {
-    state.handles.remove(task_id);
 }
 
 pub async fn run_upload(
@@ -148,15 +140,7 @@ pub async fn spawn_recorder(
     } else {
         state.recording_settings.read().await.clone()
     };
-    let (segment_size_bytes, segment_time_sec, quality, auto_cleanup_after_upload) = {
-        let config = &effective_settings;
-        (
-            config.segment_size_mb.and_then(|mb| mb.checked_mul(1024 * 1024)).filter(|v| *v > 0),
-            config.segment_time_sec.filter(|v| *v > 0),
-            quality_for_url(&url, &config.quality),
-            config.auto_cleanup_after_upload,
-        )
-    };
+    let runtime = build_runtime_config(&url, &effective_settings);
 
     let upload_configs = if let Some(task) = state.tasks.get(&task_id) {
         task.upload_configs.clone()
@@ -176,142 +160,33 @@ pub async fn spawn_recorder(
         let mut terminal_error: Option<String> = None;
 
         loop {
-            let task_name = if let Some(task) = state_for_task.tasks.get(&task_id) {
-                task.name.clone()
-            } else {
-                task_id.clone()
-            };
-            let task_dir = recording_task_dir(&task_name);
-            if let Err(e) = tokio::fs::create_dir_all(&task_dir).await {
-                tracing::error!(
-                    "Task {} failed to create recording directory {}: {}",
-                    task_id,
-                    task_dir.display(),
-                    e
-                );
+            let result = record_segment(&task_id, &url, &state_for_task, &runtime).await;
+            if let Some(message) = result.terminal_error {
+                terminal_error = Some(message);
                 break;
             }
 
-            let now = Local::now();
-            let basename = format!(
-                "{}-{}.mp4",
-                sanitize_for_filename(&task_name),
-                now.format("%Y%m%d_%H%M%S")
+            update_recorded_files(
+                &task_id,
+                result.filename,
+                &mut recorded_files,
+                &mut consecutive_empty_segments,
             );
-            let current_filename = task_dir.join(basename).to_string_lossy().to_string();
 
-            set_task_filename(&state_for_task, &task_id, &current_filename).await;
-
-            tracing::info!("Task {} starting segment: {}", task_id, current_filename);
-
-            let mut command = Command::new(STREAMLINK_PATH);
-            command.arg("-o").arg(&current_filename).arg(&url).arg(&quality);
-            command.kill_on_drop(true);
-
-            let mut child = match command.spawn() {
-                Ok(child) => child,
-                Err(e) => {
-                    let message = format!("Failed to spawn streamlink: {}", e);
-                    tracing::error!("Task {} {}", task_id, message);
-                    terminal_error = Some(message);
-                    break;
-                }
-            };
-            let mut segment_limit_reached = false;
-            let segment_started_at = Instant::now();
-            let mut check_interval = interval(Duration::from_secs(1));
-            check_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
-
-            loop {
-                tokio::select! {
-                    status = child.wait() => {
-                        match status {
-                            Ok(s) => tracing::info!("Task {} segment finished with status: {}", task_id, s),
-                            Err(e) => tracing::error!("Task {} segment error: {}", task_id, e),
-                        }
-                        break;
-                    }
-                    _ = check_interval.tick() => {
-                        if let Some(limit_sec) = segment_time_sec
-                            && segment_started_at.elapsed() >= Duration::from_secs(limit_sec)
-                        {
-                            tracing::info!(
-                                "Task {} segment time limit reached: elapsed={}s >= {}s",
-                                task_id,
-                                segment_started_at.elapsed().as_secs(),
-                                limit_sec
-                            );
-                            segment_limit_reached = true;
-                            if let Err(e) = child.kill().await {
-                                tracing::warn!(
-                                    "Task {} failed to kill streamlink after time split: {}",
-                                    task_id,
-                                    e
-                                );
-                            }
-                            break;
-                        }
-
-                        if let Some(limit) = segment_size_bytes
-                            && let Ok(meta) = tokio::fs::metadata(&current_filename).await
-                            && meta.len() > limit
-                        {
-                            tracing::info!("Task {} segment size limit reached: {} > {}", task_id, meta.len(), limit);
-                            segment_limit_reached = true;
-                            if let Err(e) = child.kill().await {
-                                tracing::warn!(
-                                    "Task {} failed to kill streamlink after size split: {}",
-                                    task_id,
-                                    e
-                                );
-                            }
-                            break;
-                        }
-                    }
-                }
-            }
-
-            if std::path::Path::new(&current_filename).exists() {
-                recorded_files.push(current_filename);
-                consecutive_empty_segments = 0;
-            } else {
-                consecutive_empty_segments = consecutive_empty_segments.saturating_add(1);
-                tracing::warn!(
-                    "Task {} segment produced no file (consecutive: {})",
-                    task_id,
-                    consecutive_empty_segments
-                );
-            }
-
-            if segment_limit_reached {
+            if result.limit_reached {
                 continue;
             }
 
-            if consecutive_empty_segments >= 3 {
-                tracing::error!(
-                    "Task {} stopped after {} empty segments: stream appears unavailable",
-                    task_id,
-                    consecutive_empty_segments
-                );
-                break;
-            }
-
-            match state_for_task.checker.check_live(&url).await {
-                Ok(true) => {
-                    tracing::warn!(
-                        "Task {} streamlink exited but stream is still live, restarting...",
-                        task_id
-                    );
-                    sleep(Duration::from_secs(5)).await;
-                    continue;
-                }
-                _ => {
-                    tracing::info!(
-                        "Task {} stream ended or check failed, stopping recorder",
-                        task_id
-                    );
-                    break;
-                }
+            match decide_next_segment_action(
+                &state_for_task,
+                &task_id,
+                &url,
+                consecutive_empty_segments,
+            )
+            .await
+            {
+                SegmentLoopAction::Continue => continue,
+                SegmentLoopAction::Stop => break,
             }
         }
 
@@ -333,14 +208,11 @@ pub async fn spawn_recorder(
                 upload_configs,
                 live_title,
                 final_task_name,
-                auto_cleanup_after_upload,
+                runtime.auto_cleanup_after_upload,
             )
             .await;
         } else {
-            let error_message =
-                terminal_error.unwrap_or_else(|| "No files generated".to_string());
-            set_task_status(&state_for_task, &task_id, TaskStatus::Error(error_message)).await;
-            clear_task_handle(&state_for_task, &task_id);
+            finish_recording_without_files(&state_for_task, &task_id, terminal_error).await;
         }
     });
 

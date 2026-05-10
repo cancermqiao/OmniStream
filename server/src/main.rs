@@ -10,6 +10,7 @@ mod recording;
 mod router;
 mod settings;
 mod state;
+mod task_launcher;
 mod tasks;
 mod uploader;
 mod uploads;

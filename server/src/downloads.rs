@@ -3,7 +3,7 @@ use axum::{
     extract::{Path, State},
     http::StatusCode,
 };
-use shared::{DownloadConfig, TaskStatus, UploadConfig};
+use shared::{DownloadConfig, TaskStatus, UploadConfig, UploadTemplate};
 use std::path::Path as FsPath;
 use uuid::Uuid;
 
@@ -45,17 +45,9 @@ pub async fn trigger_manual_upload(
 ) -> (StatusCode, String) {
     tracing::info!("Manual upload request received, download_id={}", id);
 
-    let downloads = match state.db.get_downloads().await {
-        Ok(v) => v,
-        Err(e) => {
-            tracing::error!("Failed to load downloads: {}", e);
-            return (StatusCode::INTERNAL_SERVER_ERROR, "failed to load downloads".to_string());
-        }
-    };
-
-    let Some(download) = downloads.into_iter().find(|d| d.id == id) else {
-        tracing::warn!("Manual upload rejected: download config not found, id={}", id);
-        return (StatusCode::NOT_FOUND, "download config not found".to_string());
+    let download = match load_download_for_manual_upload(&state, &id).await {
+        Ok(download) => download,
+        Err(response) => return response,
     };
 
     tracing::info!(
@@ -70,20 +62,10 @@ pub async fn trigger_manual_upload(
         return (StatusCode::BAD_REQUEST, "no linked upload templates".to_string());
     }
 
-    let uploads = match state.db.get_uploads().await {
-        Ok(v) => v,
-        Err(e) => {
-            tracing::error!("Failed to load uploads: {}", e);
-            return (StatusCode::INTERNAL_SERVER_ERROR, "failed to load uploads".to_string());
-        }
+    let upload_configs = match resolve_manual_upload_configs(&state, &download).await {
+        Ok(configs) => configs,
+        Err(response) => return response,
     };
-
-    let upload_configs: Vec<UploadConfig> = download
-        .linked_upload_ids
-        .iter()
-        .filter_map(|uid| uploads.iter().find(|u| &u.id == uid))
-        .map(|u| u.config.clone())
-        .collect();
 
     if upload_configs.is_empty() {
         tracing::warn!(
@@ -128,11 +110,8 @@ pub async fn trigger_manual_upload(
 
     let live_title = state.checker.fetch_live_title(&download.url).await;
     let task_name = download.name.clone();
-    let auto_cleanup_after_upload = if download.use_custom_recording_settings {
-        download.recording_settings.as_ref().map(|s| s.auto_cleanup_after_upload).unwrap_or(false)
-    } else {
-        state.recording_settings.read().await.auto_cleanup_after_upload
-    };
+    let auto_cleanup_after_upload =
+        resolve_auto_cleanup_after_upload(&state, &download).await;
 
     let manual_task_id = format!("manual-upload-{}", Uuid::new_v4());
     tracing::info!(
@@ -159,6 +138,52 @@ pub async fn trigger_manual_upload(
     });
 
     (StatusCode::ACCEPTED, "manual upload started".to_string())
+}
+
+async fn load_download_for_manual_upload(
+    state: &SharedState,
+    id: &str,
+) -> Result<DownloadConfig, (StatusCode, String)> {
+    let downloads = state.db.get_downloads().await.map_err(|e| {
+        tracing::error!("Failed to load downloads: {}", e);
+        (StatusCode::INTERNAL_SERVER_ERROR, "failed to load downloads".to_string())
+    })?;
+
+    downloads.into_iter().find(|d| d.id == id).ok_or_else(|| {
+        tracing::warn!("Manual upload rejected: download config not found, id={}", id);
+        (StatusCode::NOT_FOUND, "download config not found".to_string())
+    })
+}
+
+async fn resolve_manual_upload_configs(
+    state: &SharedState,
+    download: &DownloadConfig,
+) -> Result<Vec<UploadConfig>, (StatusCode, String)> {
+    let uploads = state.db.get_uploads().await.map_err(|e| {
+        tracing::error!("Failed to load uploads: {}", e);
+        (StatusCode::INTERNAL_SERVER_ERROR, "failed to load uploads".to_string())
+    })?;
+
+    Ok(select_upload_configs(&download.linked_upload_ids, &uploads))
+}
+
+fn select_upload_configs(
+    linked_upload_ids: &[String],
+    uploads: &[UploadTemplate],
+) -> Vec<UploadConfig> {
+    linked_upload_ids
+        .iter()
+        .filter_map(|uid| uploads.iter().find(|u| &u.id == uid))
+        .map(|u| u.config.clone())
+        .collect()
+}
+
+async fn resolve_auto_cleanup_after_upload(state: &SharedState, download: &DownloadConfig) -> bool {
+    if download.use_custom_recording_settings {
+        download.recording_settings.as_ref().map(|s| s.auto_cleanup_after_upload).unwrap_or(false)
+    } else {
+        state.recording_settings.read().await.auto_cleanup_after_upload
+    }
 }
 
 fn resolve_download_status(state: &SharedState, url: &str) -> String {
@@ -262,8 +287,10 @@ async fn scan_recording_files(task_dir: &FsPath) -> Result<Vec<String>, ScanReco
 
 #[cfg(test)]
 mod tests {
-    use super::{is_recording_file, scan_recording_files, status_label_for_tasks};
-    use shared::TaskStatus;
+    use super::{
+        is_recording_file, scan_recording_files, select_upload_configs, status_label_for_tasks,
+    };
+    use shared::{TaskStatus, UploadConfig, UploadTemplate};
     use std::path::Path as FsPath;
     use uuid::Uuid;
 
@@ -311,5 +338,36 @@ mod tests {
         assert_eq!(status_label_for_tasks(&[TaskStatus::Completed], false), "已完成");
         assert_eq!(status_label_for_tasks(&[TaskStatus::Stopped], false), "已停止");
         assert_eq!(status_label_for_tasks(&[TaskStatus::Idle], false), "空闲");
+    }
+
+    #[test]
+    fn select_upload_configs_keeps_only_linked_templates_in_order() {
+        let uploads = vec![
+            UploadTemplate {
+                id: "u1".to_string(),
+                name: "one".to_string(),
+                config: UploadConfig {
+                    title: Some("t1".to_string()),
+                    ..Default::default()
+                },
+            },
+            UploadTemplate {
+                id: "u2".to_string(),
+                name: "two".to_string(),
+                config: UploadConfig {
+                    title: Some("t2".to_string()),
+                    ..Default::default()
+                },
+            },
+        ];
+
+        let selected = select_upload_configs(
+            &["u2".to_string(), "missing".to_string(), "u1".to_string()],
+            &uploads,
+        );
+
+        assert_eq!(selected.len(), 2);
+        assert_eq!(selected[0].title.as_deref(), Some("t2"));
+        assert_eq!(selected[1].title.as_deref(), Some("t1"));
     }
 }
