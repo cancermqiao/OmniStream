@@ -5,6 +5,7 @@ mod app;
 mod checker;
 mod db;
 mod downloads;
+mod downloads_service;
 mod monitor;
 mod recording;
 mod router;
