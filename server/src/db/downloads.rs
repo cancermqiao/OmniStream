@@ -15,21 +15,60 @@ impl Db {
         let downloads = rows
             .into_iter()
             .map(|row| {
+                let id: String = row.get("id");
                 let ids_json: Option<String> = row.get("linked_upload_ids");
                 let linked_upload_ids: Vec<String> = match ids_json {
-                    Some(json) => serde_json::from_str(&json).unwrap_or_default(),
+                    Some(json) => match serde_json::from_str(&json) {
+                        Ok(ids) => ids,
+                        Err(e) => {
+                            tracing::warn!(
+                                "Failed to parse linked_upload_ids for download_id={}: {}",
+                                id,
+                                e
+                            );
+                            vec![]
+                        }
+                    },
                     None => vec![],
                 };
-                let use_custom_recording_settings: i64 =
-                    row.try_get("use_custom_recording_settings").unwrap_or(0);
-                let recording_settings_json: Option<String> =
-                    row.try_get("recording_settings").ok();
+                let use_custom_recording_settings: i64 = match row.try_get("use_custom_recording_settings") {
+                    Ok(value) => value,
+                    Err(e) => {
+                        tracing::warn!(
+                            "Failed to read use_custom_recording_settings for download_id={}: {}",
+                            id,
+                            e
+                        );
+                        0
+                    }
+                };
+                let recording_settings_json: Option<String> = match row.try_get("recording_settings") {
+                    Ok(value) => value,
+                    Err(e) => {
+                        tracing::warn!(
+                            "Failed to read recording_settings column for download_id={}: {}",
+                            id,
+                            e
+                        );
+                        None
+                    }
+                };
                 let recording_settings = recording_settings_json
                     .as_deref()
-                    .and_then(|json| serde_json::from_str(json).ok());
+                    .and_then(|json| match serde_json::from_str(json) {
+                        Ok(settings) => Some(settings),
+                        Err(e) => {
+                            tracing::warn!(
+                                "Failed to parse recording_settings for download_id={}: {}",
+                                id,
+                                e
+                            );
+                            None
+                        }
+                    });
 
                 DownloadConfig {
-                    id: row.get("id"),
+                    id,
                     name: row.get("name"),
                     url: row.get("url"),
                     linked_upload_ids,
@@ -77,5 +116,41 @@ impl Db {
     pub async fn delete_download(&self, id: &str) -> Result<(), Box<dyn Error>> {
         sqlx::query("DELETE FROM downloads WHERE id = ?").bind(id).execute(&self.pool).await?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Db;
+    use sqlx::Executor;
+    use std::path::PathBuf;
+    use uuid::Uuid;
+
+    fn temp_db_path(name: &str) -> PathBuf {
+        std::env::temp_dir().join(format!("omnistream-db-downloads-{name}-{}.db", Uuid::new_v4()))
+    }
+
+    #[tokio::test]
+    async fn get_downloads_falls_back_on_malformed_json_fields() {
+        let path = temp_db_path("malformed-json");
+        let db = Db::new(path.to_str().expect("db path")).await.expect("open db");
+
+        db.pool
+            .execute(
+                r#"
+                INSERT INTO downloads (
+                    id, name, url, linked_upload_ids, use_custom_recording_settings, recording_settings
+                )
+                VALUES ('d1', 'demo', 'https://example.com', 'not-json', 1, '{bad-json')
+                "#,
+            )
+            .await
+            .expect("insert broken download row");
+
+        let downloads = db.get_downloads().await.expect("read downloads");
+        assert_eq!(downloads.len(), 1);
+        assert!(downloads[0].linked_upload_ids.is_empty());
+        assert!(downloads[0].recording_settings.is_none());
+        assert!(downloads[0].use_custom_recording_settings);
     }
 }

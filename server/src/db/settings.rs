@@ -20,8 +20,17 @@ impl Db {
         };
 
         let raw: String = row.get("value");
-        let settings = serde_json::from_str::<RecordingSettings>(&raw)?;
-        Ok(Some(settings))
+        match serde_json::from_str::<RecordingSettings>(&raw) {
+            Ok(settings) => Ok(Some(settings)),
+            Err(e) => {
+                tracing::warn!(
+                    "Failed to parse app_settings value for key={}: {}",
+                    RECORDING_SETTINGS_KEY,
+                    e
+                );
+                Ok(None)
+            }
+        }
     }
 
     pub async fn save_recording_settings(
@@ -41,5 +50,37 @@ impl Db {
         .execute(&self.pool)
         .await?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{Db, RECORDING_SETTINGS_KEY};
+    use sqlx::Executor;
+    use std::path::PathBuf;
+    use uuid::Uuid;
+
+    fn temp_db_path(name: &str) -> PathBuf {
+        std::env::temp_dir().join(format!("omnistream-db-settings-{name}-{}.db", Uuid::new_v4()))
+    }
+
+    #[tokio::test]
+    async fn get_recording_settings_returns_none_on_malformed_json() {
+        let path = temp_db_path("malformed-settings");
+        let db = Db::new(path.to_str().expect("db path")).await.expect("open db");
+
+        db.pool
+            .execute(
+                format!(
+                    "INSERT INTO app_settings (key, value) VALUES ('{}', '{{bad-json')",
+                    RECORDING_SETTINGS_KEY
+                )
+                .as_str(),
+            )
+            .await
+            .expect("insert malformed settings");
+
+        let settings = db.get_recording_settings().await.expect("read settings");
+        assert!(settings.is_none());
     }
 }

@@ -12,10 +12,17 @@ impl Db {
         let uploads = rows
             .into_iter()
             .map(|row| {
+                let id: String = row.get("id");
                 let config_json: String = row.get("config");
-                let config = serde_json::from_str(&config_json).unwrap_or_default();
+                let config = match serde_json::from_str(&config_json) {
+                    Ok(config) => config,
+                    Err(e) => {
+                        tracing::warn!("Failed to parse upload config for upload_id={}: {}", id, e);
+                        Default::default()
+                    }
+                };
 
-                UploadTemplate { id: row.get("id"), name: row.get("name"), config }
+                UploadTemplate { id, name: row.get("name"), config }
             })
             .collect();
 
@@ -46,5 +53,39 @@ impl Db {
     pub async fn delete_upload(&self, id: &str) -> Result<(), Box<dyn Error>> {
         sqlx::query("DELETE FROM uploads WHERE id = ?").bind(id).execute(&self.pool).await?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Db;
+    use sqlx::Executor;
+    use std::path::PathBuf;
+    use uuid::Uuid;
+
+    fn temp_db_path(name: &str) -> PathBuf {
+        std::env::temp_dir().join(format!("omnistream-db-uploads-{name}-{}.db", Uuid::new_v4()))
+    }
+
+    #[tokio::test]
+    async fn get_uploads_falls_back_on_malformed_config_json() {
+        let path = temp_db_path("malformed-config");
+        let db = Db::new(path.to_str().expect("db path")).await.expect("open db");
+
+        db.pool
+            .execute(
+                r#"
+                INSERT INTO uploads (id, name, config)
+                VALUES ('u1', 'broken', '{bad-json')
+                "#,
+            )
+            .await
+            .expect("insert broken upload row");
+
+        let uploads = db.get_uploads().await.expect("read uploads");
+        assert_eq!(uploads.len(), 1);
+        assert_eq!(uploads[0].id, "u1");
+        assert_eq!(uploads[0].name, "broken");
+        assert_eq!(uploads[0].config, Default::default());
     }
 }
