@@ -18,6 +18,12 @@ pub fn App() -> Element {
 
     let mut editing_download = use_signal::<Option<DownloadConfig>>(|| None);
     let mut editing_upload = use_signal::<Option<UploadTemplate>>(|| None);
+    let mut download_modal_error = use_signal::<Option<String>>(|| None);
+    let mut upload_modal_error = use_signal::<Option<String>>(|| None);
+    let mut settings_message = use_signal::<Option<String>>(|| None);
+    let mut settings_error = use_signal(|| false);
+    let mut operation_message = use_signal::<Option<String>>(|| None);
+    let mut operation_error = use_signal(|| false);
 
     let mut qr_session = use_signal::<Option<QrStartResponse>>(|| None);
     let mut qr_message = use_signal::<Option<String>>(|| None);
@@ -90,19 +96,55 @@ pub fn App() -> Element {
                 }
 
                 main { class: "content",
+                    if let Some(msg) = operation_message() {
+                        p {
+                            class: if operation_error() { "status status-error" } else { "status" },
+                            "{msg}"
+                        }
+                    }
                     match active_tab() {
                         Tab::Downloads => rsx! {
                             DownloadsPage {
                                 downloads: snapshot.downloads.clone(),
                                 uploads: snapshot.uploads.clone(),
-                                on_create: move |_| editing_download.set(Some(DownloadConfig::default())),
-                                on_edit: move |d| editing_download.set(Some(d)),
+                                on_create: move |_| {
+                                    download_modal_error.set(None);
+                                    editing_download.set(Some(DownloadConfig::default()));
+                                },
+                                on_edit: move |d| {
+                                    download_modal_error.set(None);
+                                    editing_download.set(Some(d));
+                                },
                                 on_delete: move |id: String| async move {
-                                    api::delete_download(api_url, &id).await;
+                                    match api::delete_download(api_url, &id).await {
+                                        Ok(()) => {
+                                            operation_message.set(Some("下载任务已删除。".to_string()));
+                                            operation_error.set(false);
+                                            if let Some(v) = api::fetch_downloads(api_url).await {
+                                                let mut next = data();
+                                                next.downloads = v;
+                                                data.set(next);
+                                            }
+                                        }
+                                        Err(e) => {
+                                            operation_message.set(Some(format!("删除下载任务失败：{e}")));
+                                            operation_error.set(true);
+                                        }
+                                    }
                                 },
                                 on_batch_delete: move |ids: Vec<String>| async move {
+                                    let mut failed = Vec::new();
                                     for id in ids {
-                                        api::delete_download(api_url, &id).await;
+                                        if let Err(e) = api::delete_download(api_url, &id).await {
+                                            failed.push(e);
+                                        }
+                                    }
+                                    if failed.is_empty() {
+                                        operation_message.set(Some("批量删除下载任务完成。".to_string()));
+                                        operation_error.set(false);
+                                    } else {
+                                        operation_message.set(Some(format!("部分下载任务删除失败：{}", failed.join("；"))));
+                                        operation_error.set(true);
                                     }
                                     if let Some(v) = api::fetch_downloads(api_url).await {
                                         let mut next = data();
@@ -116,11 +158,21 @@ pub fn App() -> Element {
                                     }
                                     let target_ids = download_ids.into_iter().collect::<HashSet<_>>();
                                     let current = data().downloads;
+                                    let mut failed = Vec::new();
                                     for mut d in current {
                                         if target_ids.contains(&d.id) {
                                             d.linked_upload_ids = upload_ids.clone();
-                                            api::save_download(api_url, &d).await;
+                                            if let Err(e) = api::save_download(api_url, &d).await {
+                                                failed.push(e);
+                                            }
                                         }
+                                    }
+                                    if failed.is_empty() {
+                                        operation_message.set(Some("批量绑定上传任务完成。".to_string()));
+                                        operation_error.set(false);
+                                    } else {
+                                        operation_message.set(Some(format!("部分下载任务绑定失败：{}", failed.join("；"))));
+                                        operation_error.set(true);
                                     }
                                     if let Some(v) = api::fetch_downloads(api_url).await {
                                         let mut next = data();
@@ -220,18 +272,58 @@ pub fn App() -> Element {
                             UploadsPage {
                                 uploads: snapshot.uploads.clone(),
                                 accounts: snapshot.accounts.clone(),
-                                on_create: move |_| editing_upload.set(Some(UploadTemplate::default())),
-                                on_edit: move |u| editing_upload.set(Some(u)),
+                                on_create: move |_| {
+                                    upload_modal_error.set(None);
+                                    editing_upload.set(Some(UploadTemplate::default()));
+                                },
+                                on_edit: move |u| {
+                                    upload_modal_error.set(None);
+                                    editing_upload.set(Some(u));
+                                },
                                 on_delete: move |id: String| async move {
-                                    api::delete_upload(api_url, &id).await;
+                                    match api::delete_upload(api_url, &id).await {
+                                        Ok(()) => {
+                                            operation_message.set(Some("上传任务已删除，并已清理下载任务关联。".to_string()));
+                                            operation_error.set(false);
+                                            if let Some(v) = api::fetch_uploads(api_url).await {
+                                                let mut next = data();
+                                                next.uploads = v;
+                                                data.set(next);
+                                            }
+                                            if let Some(v) = api::fetch_downloads(api_url).await {
+                                                let mut next = data();
+                                                next.downloads = v;
+                                                data.set(next);
+                                            }
+                                        }
+                                        Err(e) => {
+                                            operation_message.set(Some(format!("删除上传任务失败：{e}")));
+                                            operation_error.set(true);
+                                        }
+                                    }
                                 },
                                 on_batch_delete: move |ids: Vec<String>| async move {
+                                    let mut failed = Vec::new();
                                     for id in ids {
-                                        api::delete_upload(api_url, &id).await;
+                                        if let Err(e) = api::delete_upload(api_url, &id).await {
+                                            failed.push(e);
+                                        }
+                                    }
+                                    if failed.is_empty() {
+                                        operation_message.set(Some("批量删除上传任务完成，并已清理下载任务关联。".to_string()));
+                                        operation_error.set(false);
+                                    } else {
+                                        operation_message.set(Some(format!("部分上传任务删除失败：{}", failed.join("；"))));
+                                        operation_error.set(true);
                                     }
                                     if let Some(v) = api::fetch_uploads(api_url).await {
                                         let mut next = data();
                                         next.uploads = v;
+                                        data.set(next);
+                                    }
+                                    if let Some(v) = api::fetch_downloads(api_url).await {
+                                        let mut next = data();
+                                        next.downloads = v;
                                         data.set(next);
                                     }
                                 },
@@ -240,12 +332,23 @@ pub fn App() -> Element {
                         Tab::Settings => rsx! {
                             SettingsPage {
                                 settings: snapshot.recording_settings.clone(),
+                                save_message: settings_message(),
+                                save_error: settings_error(),
                                 on_save: move |settings| async move {
-                                    api::save_recording_settings(api_url, &settings).await;
-                                    if let Some(v) = api::fetch_recording_settings(api_url).await {
-                                        let mut next = data();
-                                        next.recording_settings = v;
-                                        data.set(next);
+                                    match api::save_recording_settings(api_url, &settings).await {
+                                        Ok(()) => {
+                                            settings_message.set(Some("录制设置已保存。".to_string()));
+                                            settings_error.set(false);
+                                            if let Some(v) = api::fetch_recording_settings(api_url).await {
+                                                let mut next = data();
+                                                next.recording_settings = v;
+                                                data.set(next);
+                                            }
+                                        }
+                                        Err(e) => {
+                                            settings_message.set(Some(format!("录制设置保存失败：{e}")));
+                                            settings_error.set(true);
+                                        }
                                     }
                                 },
                             }
@@ -258,10 +361,23 @@ pub fn App() -> Element {
                 DownloadModal {
                     config: config.clone(),
                     uploads: snapshot.uploads.clone(),
+                    save_error: download_modal_error(),
                     on_close: move |_| editing_download.set(None),
                     on_save: move |payload| async move {
-                        api::save_download(api_url, &payload).await;
-                        editing_download.set(None);
+                        match api::save_download(api_url, &payload).await {
+                            Ok(()) => {
+                                download_modal_error.set(None);
+                                editing_download.set(None);
+                                operation_message.set(Some("下载任务已保存。".to_string()));
+                                operation_error.set(false);
+                                if let Some(v) = api::fetch_downloads(api_url).await {
+                                    let mut next = data();
+                                    next.downloads = v;
+                                    data.set(next);
+                                }
+                            }
+                            Err(e) => download_modal_error.set(Some(format!("保存下载任务失败：{e}"))),
+                        }
                     },
                 }
             }
@@ -270,10 +386,23 @@ pub fn App() -> Element {
                 UploadModal {
                     template: template.clone(),
                     accounts: snapshot.accounts.clone(),
+                    save_error: upload_modal_error(),
                     on_close: move |_| editing_upload.set(None),
                     on_save: move |payload| async move {
-                        api::save_upload(api_url, &payload).await;
-                        editing_upload.set(None);
+                        match api::save_upload(api_url, &payload).await {
+                            Ok(()) => {
+                                upload_modal_error.set(None);
+                                editing_upload.set(None);
+                                operation_message.set(Some("上传任务已保存。".to_string()));
+                                operation_error.set(false);
+                                if let Some(v) = api::fetch_uploads(api_url).await {
+                                    let mut next = data();
+                                    next.uploads = v;
+                                    data.set(next);
+                                }
+                            }
+                            Err(e) => upload_modal_error.set(Some(format!("保存上传任务失败：{e}"))),
+                        }
                     },
                 }
             }

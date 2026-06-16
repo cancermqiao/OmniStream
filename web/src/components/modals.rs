@@ -12,6 +12,7 @@ const QUALITY_OPTIONS: &[&str] =
 pub fn DownloadModal(
     config: DownloadConfig,
     uploads: Vec<UploadTemplate>,
+    save_error: Option<String>,
     on_close: EventHandler<()>,
     on_save: EventHandler<DownloadConfig>,
 ) -> Element {
@@ -31,6 +32,7 @@ pub fn DownloadModal(
     let mut q_twitch = use_signal(|| base_settings.quality.twitch.clone());
     let mut q_youtube = use_signal(|| base_settings.quality.youtube.clone());
     let mut q_default = use_signal(|| base_settings.quality.default_quality.clone());
+    let mut form_error = use_signal::<Option<String>>(|| None);
 
     rsx! {
         div { class: "modal-wrap",
@@ -114,18 +116,44 @@ pub fn DownloadModal(
                     }
                 }
 
+                if let Some(err) = form_error() {
+                    p { class: "status status-error", "{err}" }
+                } else if let Some(err) = save_error.clone() {
+                    p { class: "status status-error", "{err}" }
+                }
+
                 div { class: "inline-actions",
                     button { class: "btn btn-ghost", onclick: move |_| on_close.call(()), "取消" }
                     button {
                         class: "btn btn-primary",
                         onclick: move |_| {
-                            let parse_opt_u64 = |v: String| {
+                            let parse_opt_u64 = |label: &str, v: String| -> Result<Option<u64>, String> {
                                 let t = v.trim();
-                                if t.is_empty() { None } else { t.parse::<u64>().ok() }
+                                if t.is_empty() {
+                                    Ok(None)
+                                } else {
+                                    t.parse::<u64>()
+                                        .map(Some)
+                                        .map_err(|_| format!("{label}只能填写非负整数或留空"))
+                                }
+                            };
+                            let segment_size = match parse_opt_u64("单文件分片大小", segment_size_mb()) {
+                                Ok(v) => v,
+                                Err(message) => {
+                                    form_error.set(Some(message));
+                                    return;
+                                }
+                            };
+                            let segment_time = match parse_opt_u64("单文件分片时长", segment_time_sec()) {
+                                Ok(v) => v,
+                                Err(message) => {
+                                    form_error.set(Some(message));
+                                    return;
+                                }
                             };
                             let task_settings = RecordingSettings {
-                                segment_size_mb: parse_opt_u64(segment_size_mb()),
-                                segment_time_sec: parse_opt_u64(segment_time_sec()),
+                                segment_size_mb: segment_size,
+                                segment_time_sec: segment_time,
                                 quality: PlatformQualityConfig {
                                     bilibili: q_bilibili(),
                                     douyu: q_douyu(),
@@ -136,6 +164,7 @@ pub fn DownloadModal(
                                 },
                                 auto_cleanup_after_upload: auto_cleanup_after_upload(),
                             };
+                            form_error.set(None);
                             on_save.call(DownloadConfig {
                                 id: config.id.clone(),
                                 name: name(),
@@ -184,6 +213,7 @@ fn QualitySelect(label: String, value: Signal<String>, on_change: EventHandler<S
 pub fn UploadModal(
     template: UploadTemplate,
     accounts: Vec<UploadAccount>,
+    save_error: Option<String>,
     on_close: EventHandler<()>,
     on_save: EventHandler<UploadTemplate>,
 ) -> Element {
@@ -279,6 +309,8 @@ pub fn UploadModal(
                 }
 
                 if let Some(err) = form_error() {
+                    p { class: "status status-error", "{err}" }
+                } else if let Some(err) = save_error.clone() {
                     p { class: "status status-error", "{err}" }
                 }
 

@@ -62,12 +62,26 @@ fn api_bases(api_url: &str) -> Vec<String> {
     bases
 }
 
+async fn response_error(endpoint: &str, resp: reqwest::Response) -> String {
+    let status = resp.status();
+    let body = resp.text().await.unwrap_or_default();
+    if body.trim().is_empty() {
+        format!("{endpoint} -> status {status}")
+    } else {
+        format!("{endpoint} -> status {status}, body: {body}")
+    }
+}
+
 pub async fn fetch_downloads(api_url: &str) -> Option<Vec<DownloadConfig>> {
     for base in api_bases(api_url) {
-        if let Ok(resp) = reqwest::get(join_url(&base, "/downloads")).await
-            && let Ok(v) = resp.json().await
-        {
-            return Some(v);
+        let endpoint = join_url(&base, "/downloads");
+        if let Ok(resp) = reqwest::get(&endpoint).await {
+            if !resp.status().is_success() {
+                continue;
+            }
+            if let Ok(v) = resp.json().await {
+                return Some(v);
+            }
         }
     }
     None
@@ -75,10 +89,14 @@ pub async fn fetch_downloads(api_url: &str) -> Option<Vec<DownloadConfig>> {
 
 pub async fn fetch_uploads(api_url: &str) -> Option<Vec<UploadTemplate>> {
     for base in api_bases(api_url) {
-        if let Ok(resp) = reqwest::get(join_url(&base, "/uploads")).await
-            && let Ok(v) = resp.json().await
-        {
-            return Some(v);
+        let endpoint = join_url(&base, "/uploads");
+        if let Ok(resp) = reqwest::get(&endpoint).await {
+            if !resp.status().is_success() {
+                continue;
+            }
+            if let Ok(v) = resp.json().await {
+                return Some(v);
+            }
         }
     }
     None
@@ -86,57 +104,85 @@ pub async fn fetch_uploads(api_url: &str) -> Option<Vec<UploadTemplate>> {
 
 pub async fn fetch_accounts(api_url: &str) -> Option<Vec<UploadAccount>> {
     for base in api_bases(api_url) {
-        if let Ok(resp) = reqwest::get(join_url(&base, "/accounts")).await
-            && let Ok(v) = resp.json().await
-        {
-            return Some(v);
+        let endpoint = join_url(&base, "/accounts");
+        if let Ok(resp) = reqwest::get(&endpoint).await {
+            if !resp.status().is_success() {
+                continue;
+            }
+            if let Ok(v) = resp.json().await {
+                return Some(v);
+            }
         }
     }
     None
 }
 
-pub async fn save_download(api_url: &str, payload: &DownloadConfig) {
+pub async fn save_download(api_url: &str, payload: &DownloadConfig) -> Result<(), String> {
+    let mut last_err = "request not sent".to_string();
     for base in api_bases(api_url) {
-        if let Ok(resp) =
-            reqwest::Client::new().post(join_url(&base, "/downloads")).json(payload).send().await
-            && resp.status().is_success()
-        {
-            break;
+        let endpoint = join_url(&base, "/downloads");
+        match reqwest::Client::new().post(&endpoint).json(payload).send().await {
+            Ok(resp) => {
+                if resp.status().is_success() {
+                    return Ok(());
+                }
+                last_err = response_error(&endpoint, resp).await;
+            }
+            Err(e) => last_err = format!("{endpoint} -> {e}"),
         }
     }
+    Err(last_err)
 }
 
-pub async fn delete_download(api_url: &str, id: &str) {
+pub async fn delete_download(api_url: &str, id: &str) -> Result<(), String> {
+    let mut last_err = "request not sent".to_string();
     for base in api_bases(api_url) {
-        if let Ok(resp) =
-            reqwest::Client::new().delete(join_url(&base, &format!("/downloads/{id}"))).send().await
-            && resp.status().is_success()
-        {
-            break;
+        let endpoint = join_url(&base, &format!("/downloads/{id}"));
+        match reqwest::Client::new().delete(&endpoint).send().await {
+            Ok(resp) => {
+                if resp.status().is_success() {
+                    return Ok(());
+                }
+                last_err = response_error(&endpoint, resp).await;
+            }
+            Err(e) => last_err = format!("{endpoint} -> {e}"),
         }
     }
+    Err(last_err)
 }
 
-pub async fn save_upload(api_url: &str, payload: &UploadTemplate) {
+pub async fn save_upload(api_url: &str, payload: &UploadTemplate) -> Result<(), String> {
+    let mut last_err = "request not sent".to_string();
     for base in api_bases(api_url) {
-        if let Ok(resp) =
-            reqwest::Client::new().post(join_url(&base, "/uploads")).json(payload).send().await
-            && resp.status().is_success()
-        {
-            break;
+        let endpoint = join_url(&base, "/uploads");
+        match reqwest::Client::new().post(&endpoint).json(payload).send().await {
+            Ok(resp) => {
+                if resp.status().is_success() {
+                    return Ok(());
+                }
+                last_err = response_error(&endpoint, resp).await;
+            }
+            Err(e) => last_err = format!("{endpoint} -> {e}"),
         }
     }
+    Err(last_err)
 }
 
-pub async fn delete_upload(api_url: &str, id: &str) {
+pub async fn delete_upload(api_url: &str, id: &str) -> Result<(), String> {
+    let mut last_err = "request not sent".to_string();
     for base in api_bases(api_url) {
-        if let Ok(resp) =
-            reqwest::Client::new().delete(join_url(&base, &format!("/uploads/{id}"))).send().await
-            && resp.status().is_success()
-        {
-            break;
+        let endpoint = join_url(&base, &format!("/uploads/{id}"));
+        match reqwest::Client::new().delete(&endpoint).send().await {
+            Ok(resp) => {
+                if resp.status().is_success() {
+                    return Ok(());
+                }
+                last_err = response_error(&endpoint, resp).await;
+            }
+            Err(e) => last_err = format!("{endpoint} -> {e}"),
         }
     }
+    Err(last_err)
 }
 
 pub async fn start_qr_login(api_url: &str) -> Result<QrStartResponse, String> {
@@ -223,27 +269,37 @@ pub async fn delete_account(api_url: &str, account_file: String) {
 
 pub async fn fetch_recording_settings(api_url: &str) -> Option<RecordingSettings> {
     for base in api_bases(api_url) {
-        if let Ok(resp) = reqwest::get(join_url(&base, "/settings/recording")).await
-            && let Ok(v) = resp.json().await
-        {
-            return Some(v);
+        let endpoint = join_url(&base, "/settings/recording");
+        if let Ok(resp) = reqwest::get(&endpoint).await {
+            if !resp.status().is_success() {
+                continue;
+            }
+            if let Ok(v) = resp.json().await {
+                return Some(v);
+            }
         }
     }
     None
 }
 
-pub async fn save_recording_settings(api_url: &str, settings: &RecordingSettings) {
+pub async fn save_recording_settings(
+    api_url: &str,
+    settings: &RecordingSettings,
+) -> Result<(), String> {
+    let mut last_err = "request not sent".to_string();
     for base in api_bases(api_url) {
-        if let Ok(resp) = reqwest::Client::new()
-            .post(join_url(&base, "/settings/recording"))
-            .json(settings)
-            .send()
-            .await
-            && resp.status().is_success()
-        {
-            break;
+        let endpoint = join_url(&base, "/settings/recording");
+        match reqwest::Client::new().post(&endpoint).json(settings).send().await {
+            Ok(resp) => {
+                if resp.status().is_success() {
+                    return Ok(());
+                }
+                last_err = response_error(&endpoint, resp).await;
+            }
+            Err(e) => last_err = format!("{endpoint} -> {e}"),
         }
     }
+    Err(last_err)
 }
 
 pub async fn trigger_manual_upload(api_url: &str, id: &str) -> Result<String, String> {
@@ -253,19 +309,14 @@ pub async fn trigger_manual_upload(api_url: &str, id: &str) -> Result<String, St
         let endpoint = join_url(&base, &format!("/downloads/{id}/upload"));
         match reqwest::Client::new().post(&endpoint).send().await {
             Ok(resp) => {
-                let status = resp.status();
-                let body = resp.text().await.unwrap_or_default();
-                if status.is_success() {
+                if resp.status().is_success() {
+                    let body = resp.text().await.unwrap_or_default();
                     if body.trim().is_empty() {
                         return Ok("manual upload started".to_string());
                     }
                     return Ok(body);
                 }
-                last_err = if body.trim().is_empty() {
-                    format!("{endpoint} -> status {status}")
-                } else {
-                    format!("{endpoint} -> status {status}, body: {body}")
-                };
+                last_err = response_error(&endpoint, resp).await;
             }
             Err(e) => {
                 last_err = format!("{endpoint} -> {e}");

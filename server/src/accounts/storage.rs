@@ -64,6 +64,16 @@ pub async fn delete_account(account_file: &str) -> Result<(), String> {
         .map_err(|e| format!("Failed to save account meta after delete: {e}"))
 }
 
+pub async fn account_file_exists(account_file: &str) -> bool {
+    let key = account_file_key(account_file);
+    if key.is_empty() {
+        return false;
+    }
+
+    tokio::fs::metadata(account_file).await.map(|m| m.is_file()).unwrap_or(false)
+        || tokio::fs::metadata(cookies_dir().join(key)).await.map(|m| m.is_file()).unwrap_or(false)
+}
+
 pub async fn save_login_info(login_info: LoginInfo) -> Result<(), Box<dyn std::error::Error>> {
     tokio::fs::create_dir_all(cookies_dir()).await?;
     let (name, mid) = bili::nav_from_cookie_info(&login_info.cookie_info)

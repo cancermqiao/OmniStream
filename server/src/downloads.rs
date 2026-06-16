@@ -82,6 +82,9 @@ async fn validate_download_config(
     if parsed_url.host_str().is_none() {
         return Err((StatusCode::BAD_REQUEST, "download url must include a host".to_string()));
     }
+    if !is_supported_download_scheme(parsed_url.scheme()) {
+        return Err((StatusCode::BAD_REQUEST, "download url must use http or https".to_string()));
+    }
 
     if config.use_custom_recording_settings {
         let Some(recording_settings) = config.recording_settings.clone() else {
@@ -113,6 +116,10 @@ async fn validate_download_config(
     }
 
     Ok(())
+}
+
+fn is_supported_download_scheme(scheme: &str) -> bool {
+    scheme == "http" || scheme == "https"
 }
 
 pub async fn trigger_manual_upload(
@@ -293,6 +300,13 @@ mod tests {
         assert_eq!(config.url, "https://example.com/live");
         assert_eq!(config.linked_upload_ids, vec!["u1"]);
         assert_eq!(config.current_status, None);
+    }
+
+    #[test]
+    fn download_url_scheme_allows_only_http_and_https() {
+        assert!(super::is_supported_download_scheme("http"));
+        assert!(super::is_supported_download_scheme("https"));
+        assert!(!super::is_supported_download_scheme("file"));
     }
 
     #[test]

@@ -13,23 +13,27 @@ pub async fn get_recording_settings(State(state): State<SharedState>) -> Json<Re
 pub async fn set_recording_settings(
     State(state): State<SharedState>,
     Json(payload): Json<RecordingSettings>,
-) -> StatusCode {
+) -> (StatusCode, String) {
     let settings = match sanitize_recording_settings(payload) {
         Ok(settings) => settings,
         Err(message) => {
             tracing::warn!("Rejected recording settings update: {}", message);
-            return StatusCode::BAD_REQUEST;
+            return (StatusCode::BAD_REQUEST, message);
         }
     };
-    {
-        let mut lock = state.recording_settings.write().await;
-        *lock = settings.clone();
-    }
+
     if let Err(e) = state.db.save_recording_settings(&settings).await {
         tracing::error!("Failed to save recording settings: {}", e);
-        return StatusCode::INTERNAL_SERVER_ERROR;
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "failed to save recording settings".to_string(),
+        );
     }
-    StatusCode::OK
+    {
+        let mut lock = state.recording_settings.write().await;
+        *lock = settings;
+    }
+    (StatusCode::OK, String::new())
 }
 
 pub(crate) fn sanitize_recording_settings(

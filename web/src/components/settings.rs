@@ -7,6 +7,8 @@ const QUALITY_OPTIONS: &[&str] =
 #[component]
 pub fn SettingsPage(
     settings: RecordingSettings,
+    save_message: Option<String>,
+    save_error: bool,
     on_save: EventHandler<RecordingSettings>,
 ) -> Element {
     let mut segment_size_mb =
@@ -21,6 +23,7 @@ pub fn SettingsPage(
     let mut youtube = use_signal(|| settings.quality.youtube.clone());
     let mut default_quality = use_signal(|| settings.quality.default_quality.clone());
     let mut auto_cleanup_after_upload = use_signal(|| settings.auto_cleanup_after_upload);
+    let mut form_error = use_signal::<Option<String>>(|| None);
 
     rsx! {
         div { class: "page",
@@ -76,18 +79,48 @@ pub fn SettingsPage(
                     span { "上传全部成功后自动删除本地录制文件（释放空间）" }
                 }
 
+                if let Some(err) = form_error() {
+                    p { class: "status status-error", "{err}" }
+                } else if let Some(msg) = save_message.clone() {
+                    p {
+                        class: if save_error { "status status-error" } else { "status" },
+                        "{msg}"
+                    }
+                }
+
                 div { class: "inline-actions",
                     button {
                         class: "btn btn-primary",
                         onclick: move |_| {
-                            let parse_opt_u64 = |v: String| {
+                            let parse_opt_u64 = |label: &str, v: String| -> Result<Option<u64>, String> {
                                 let t = v.trim();
-                                if t.is_empty() { None } else { t.parse::<u64>().ok() }
+                                if t.is_empty() {
+                                    Ok(None)
+                                } else {
+                                    t.parse::<u64>()
+                                        .map(Some)
+                                        .map_err(|_| format!("{label}只能填写非负整数或留空"))
+                                }
+                            };
+                            let segment_size = match parse_opt_u64("单文件分片大小", segment_size_mb()) {
+                                Ok(v) => v,
+                                Err(message) => {
+                                    form_error.set(Some(message));
+                                    return;
+                                }
+                            };
+                            let segment_time = match parse_opt_u64("单文件分片时长", segment_time_sec()) {
+                                Ok(v) => v,
+                                Err(message) => {
+                                    form_error.set(Some(message));
+                                    return;
+                                }
                             };
 
+                            form_error.set(None);
                             on_save.call(RecordingSettings {
-                                segment_size_mb: parse_opt_u64(segment_size_mb()),
-                                segment_time_sec: parse_opt_u64(segment_time_sec()),
+                                segment_size_mb: segment_size,
+                                segment_time_sec: segment_time,
                                 quality: shared::PlatformQualityConfig {
                                     bilibili: bilibili(),
                                     douyu: douyu(),

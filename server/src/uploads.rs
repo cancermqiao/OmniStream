@@ -6,7 +6,7 @@ use axum::{
 use shared::UploadTemplate;
 use uuid::Uuid;
 
-use crate::state::SharedState;
+use crate::{accounts::storage, state::SharedState};
 
 const MAX_UPLOAD_TITLE_TEMPLATE_CHARS: usize = 80;
 const MAX_UPLOAD_DESCRIPTION_CHARS: usize = 2_000;
@@ -36,7 +36,7 @@ pub async fn add_upload(
     }
     normalize_upload_template(&mut template);
 
-    if let Err(message) = validate_upload_template(&template) {
+    if let Err(message) = validate_upload_template(&template).await {
         tracing::warn!("Rejected upload template update: {}", message);
         return (StatusCode::BAD_REQUEST, message);
     }
@@ -69,7 +69,15 @@ fn normalize_upload_template(template: &mut UploadTemplate) {
         .collect();
 }
 
-fn validate_upload_template(template: &UploadTemplate) -> Result<(), String> {
+async fn validate_upload_template(template: &UploadTemplate) -> Result<(), String> {
+    validate_upload_template_shape(template)?;
+    if !storage::account_file_exists(&template.config.account_file).await {
+        return Err(format!("account_file does not exist: {}", template.config.account_file));
+    }
+    Ok(())
+}
+
+fn validate_upload_template_shape(template: &UploadTemplate) -> Result<(), String> {
     if template.name.is_empty() {
         return Err("upload template name is required".to_string());
     }
@@ -108,16 +116,17 @@ fn validate_upload_template(template: &UploadTemplate) -> Result<(), String> {
 }
 
 pub async fn delete_upload(Path(id): Path<String>, State(state): State<SharedState>) -> StatusCode {
-    if let Err(e) = state.db.delete_upload(&id).await {
+    if let Err(e) = state.db.delete_upload_and_unlink_downloads(&id).await {
         tracing::error!("Failed to delete upload: {}", e);
         return StatusCode::INTERNAL_SERVER_ERROR;
     }
+
     StatusCode::OK
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_upload_template, validate_upload_template};
+    use super::{normalize_upload_template, validate_upload_template_shape};
     use shared::{UploadConfig, UploadTemplate};
 
     fn valid_template() -> UploadTemplate {
@@ -145,24 +154,24 @@ mod tests {
     }
 
     #[test]
-    fn validate_upload_template_rejects_missing_required_fields() {
+    fn validate_upload_template_shape_rejects_missing_required_fields() {
         let mut template = valid_template();
         template.name.clear();
-        assert!(validate_upload_template(&template).is_err());
+        assert!(validate_upload_template_shape(&template).is_err());
 
         let mut template = valid_template();
         template.config.account_file.clear();
-        assert!(validate_upload_template(&template).is_err());
+        assert!(validate_upload_template_shape(&template).is_err());
     }
 
     #[test]
-    fn validate_upload_template_rejects_invalid_limits() {
+    fn validate_upload_template_shape_rejects_invalid_limits() {
         let mut template = valid_template();
         template.config.copyright = 3;
-        assert!(validate_upload_template(&template).is_err());
+        assert!(validate_upload_template_shape(&template).is_err());
 
         let mut template = valid_template();
         template.config.tags = vec!["x".repeat(21)];
-        assert!(validate_upload_template(&template).is_err());
+        assert!(validate_upload_template_shape(&template).is_err());
     }
 }
