@@ -22,10 +22,7 @@ fn build_stream_task(task_id: String, params: &LaunchTaskParams) -> StreamTask {
     }
 }
 
-pub async fn launch_recording_task(
-    state: SharedState,
-    params: LaunchTaskParams,
-) -> StreamTask {
+pub async fn launch_recording_task(state: SharedState, params: LaunchTaskParams) -> StreamTask {
     let task_id = Uuid::new_v4().to_string();
     let task = build_stream_task(task_id.clone(), &params);
 

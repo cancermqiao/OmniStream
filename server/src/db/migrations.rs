@@ -37,11 +37,7 @@ pub async fn run_migrations(pool: &Pool<Sqlite>) -> Result<(), Box<dyn Error>> {
             continue;
         }
 
-        tracing::info!(
-            "Applying database migration {} - {}",
-            migration.version,
-            migration.name
-        );
+        tracing::info!("Applying database migration {} - {}", migration.version, migration.name);
         apply_migration(pool, *migration).await?;
     }
 
@@ -184,12 +180,11 @@ mod tests {
 
         run_migrations(&pool).await.expect("run migrations");
 
-        let versions: Vec<i64> = sqlx::query_scalar(
-            "SELECT version FROM schema_migrations ORDER BY version",
-        )
-        .fetch_all(&pool)
-        .await
-        .expect("fetch versions");
+        let versions: Vec<i64> =
+            sqlx::query_scalar("SELECT version FROM schema_migrations ORDER BY version")
+                .fetch_all(&pool)
+                .await
+                .expect("fetch versions");
         assert_eq!(versions, vec![1, 2, 3]);
 
         let task_columns = column_names(&pool, "tasks").await;
@@ -271,12 +266,11 @@ mod tests {
 
         run_migrations(&pool).await.expect("upgrade legacy db");
 
-        let versions: Vec<i64> = sqlx::query_scalar(
-            "SELECT version FROM schema_migrations ORDER BY version",
-        )
-        .fetch_all(&pool)
-        .await
-        .expect("fetch versions");
+        let versions: Vec<i64> =
+            sqlx::query_scalar("SELECT version FROM schema_migrations ORDER BY version")
+                .fetch_all(&pool)
+                .await
+                .expect("fetch versions");
         assert_eq!(versions, vec![1, 2, 3]);
 
         let task_columns = column_names(&pool, "tasks").await;

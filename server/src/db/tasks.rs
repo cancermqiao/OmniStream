@@ -1,7 +1,7 @@
 use shared::{StreamTask, TaskStatus};
 use sqlx::Row;
-use std::io;
 use std::error::Error;
+use std::io;
 
 use super::Db;
 

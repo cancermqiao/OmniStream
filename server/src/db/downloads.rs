@@ -31,7 +31,9 @@ impl Db {
                     },
                     None => vec![],
                 };
-                let use_custom_recording_settings: i64 = match row.try_get("use_custom_recording_settings") {
+                let use_custom_recording_settings: i64 = match row
+                    .try_get("use_custom_recording_settings")
+                {
                     Ok(value) => value,
                     Err(e) => {
                         tracing::warn!(
@@ -42,20 +44,22 @@ impl Db {
                         0
                     }
                 };
-                let recording_settings_json: Option<String> = match row.try_get("recording_settings") {
-                    Ok(value) => value,
-                    Err(e) => {
-                        tracing::warn!(
-                            "Failed to read recording_settings column for download_id={}: {}",
-                            id,
-                            e
-                        );
-                        None
-                    }
-                };
-                let recording_settings = recording_settings_json
-                    .as_deref()
-                    .and_then(|json| match serde_json::from_str(json) {
+                let recording_settings_json: Option<String> =
+                    match row.try_get("recording_settings") {
+                        Ok(value) => value,
+                        Err(e) => {
+                            tracing::warn!(
+                                "Failed to read recording_settings column for download_id={}: {}",
+                                id,
+                                e
+                            );
+                            None
+                        }
+                    };
+                let recording_settings =
+                    recording_settings_json.as_deref().and_then(|json| match serde_json::from_str(
+                        json,
+                    ) {
                         Ok(settings) => Some(settings),
                         Err(e) => {
                             tracing::warn!(

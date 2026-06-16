@@ -3,6 +3,9 @@ use shared::RecordingSettings;
 
 use crate::state::SharedState;
 
+const MAX_SEGMENT_SIZE_MB: u64 = 102_400;
+const MAX_SEGMENT_TIME_SEC: u64 = 86_400;
+
 pub async fn get_recording_settings(State(state): State<SharedState>) -> Json<RecordingSettings> {
     Json(state.recording_settings.read().await.clone())
 }
@@ -11,7 +14,13 @@ pub async fn set_recording_settings(
     State(state): State<SharedState>,
     Json(payload): Json<RecordingSettings>,
 ) -> StatusCode {
-    let settings = sanitize(payload);
+    let settings = match sanitize_recording_settings(payload) {
+        Ok(settings) => settings,
+        Err(message) => {
+            tracing::warn!("Rejected recording settings update: {}", message);
+            return StatusCode::BAD_REQUEST;
+        }
+    };
     {
         let mut lock = state.recording_settings.write().await;
         *lock = settings.clone();
@@ -23,7 +32,9 @@ pub async fn set_recording_settings(
     StatusCode::OK
 }
 
-fn sanitize(mut settings: RecordingSettings) -> RecordingSettings {
+pub(crate) fn sanitize_recording_settings(
+    mut settings: RecordingSettings,
+) -> Result<RecordingSettings, String> {
     if settings.segment_size_mb == Some(0) {
         settings.segment_size_mb = None;
     }
@@ -38,7 +49,24 @@ fn sanitize(mut settings: RecordingSettings) -> RecordingSettings {
     normalize_quality(&mut settings.quality.youtube);
     normalize_quality(&mut settings.quality.default_quality);
 
-    settings
+    if let Some(size) = settings.segment_size_mb
+        && size > MAX_SEGMENT_SIZE_MB
+    {
+        return Err(format!(
+            "segment_size_mb exceeds maximum allowed value: {}",
+            MAX_SEGMENT_SIZE_MB
+        ));
+    }
+    if let Some(time) = settings.segment_time_sec
+        && time > MAX_SEGMENT_TIME_SEC
+    {
+        return Err(format!(
+            "segment_time_sec exceeds maximum allowed value: {}",
+            MAX_SEGMENT_TIME_SEC
+        ));
+    }
+
+    Ok(settings)
 }
 
 fn normalize_quality(v: &mut String) {
@@ -47,5 +75,36 @@ fn normalize_quality(v: &mut String) {
         *v = "best".to_string();
     } else {
         *v = trimmed.to_string();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::sanitize_recording_settings;
+    use shared::RecordingSettings;
+
+    #[test]
+    fn sanitize_recording_settings_normalizes_zero_and_blank_quality() {
+        let mut settings = RecordingSettings {
+            segment_size_mb: Some(0),
+            segment_time_sec: Some(0),
+            ..Default::default()
+        };
+        settings.quality.bilibili = "  ".to_string();
+        settings.quality.default_quality = "  best  ".to_string();
+
+        let sanitized = sanitize_recording_settings(settings).expect("settings are valid");
+
+        assert_eq!(sanitized.segment_size_mb, None);
+        assert_eq!(sanitized.segment_time_sec, None);
+        assert_eq!(sanitized.quality.bilibili, "best");
+        assert_eq!(sanitized.quality.default_quality, "best");
+    }
+
+    #[test]
+    fn sanitize_recording_settings_rejects_extreme_values() {
+        let settings = RecordingSettings { segment_size_mb: Some(102_401), ..Default::default() };
+
+        assert!(sanitize_recording_settings(settings).is_err());
     }
 }

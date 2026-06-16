@@ -15,10 +15,7 @@ pub(crate) async fn load_download_for_manual_upload(
 ) -> Result<DownloadConfig, (axum::http::StatusCode, String)> {
     let downloads = state.db.get_downloads().await.map_err(|e| {
         tracing::error!("Failed to load downloads: {}", e);
-        (
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-            "failed to load downloads".to_string(),
-        )
+        (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "failed to load downloads".to_string())
     })?;
 
     downloads.into_iter().find(|d| d.id == id).ok_or_else(|| {
@@ -33,10 +30,7 @@ pub(crate) async fn resolve_manual_upload_configs(
 ) -> Result<Vec<UploadConfig>, (axum::http::StatusCode, String)> {
     let uploads = state.db.get_uploads().await.map_err(|e| {
         tracing::error!("Failed to load uploads: {}", e);
-        (
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-            "failed to load uploads".to_string(),
-        )
+        (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "failed to load uploads".to_string())
     })?;
 
     Ok(select_upload_configs(&download.linked_upload_ids, &uploads))
@@ -144,18 +138,12 @@ mod tests {
             UploadTemplate {
                 id: "u1".to_string(),
                 name: "one".to_string(),
-                config: UploadConfig {
-                    title: Some("t1".to_string()),
-                    ..Default::default()
-                },
+                config: UploadConfig { title: Some("t1".to_string()), ..Default::default() },
             },
             UploadTemplate {
                 id: "u2".to_string(),
                 name: "two".to_string(),
-                config: UploadConfig {
-                    title: Some("t2".to_string()),
-                    ..Default::default()
-                },
+                config: UploadConfig { title: Some("t2".to_string()), ..Default::default() },
             },
         ];
 

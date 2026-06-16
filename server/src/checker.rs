@@ -52,7 +52,11 @@ impl StreamlinkChecker {
         let output = match Command::new(STREAMLINK_PATH).arg("--json").arg(url).output().await {
             Ok(output) => output,
             Err(e) => {
-                tracing::warn!("Failed to run streamlink for live title lookup, url={}: {}", url, e);
+                tracing::warn!(
+                    "Failed to run streamlink for live title lookup, url={}: {}",
+                    url,
+                    e
+                );
                 return fetch_huya_live_title(url).await;
             }
         };

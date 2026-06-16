@@ -8,24 +8,26 @@ use uuid::Uuid;
 
 use crate::{
     downloads_service::{
-        ScanRecordingFilesError, load_download_for_manual_upload, resolve_auto_cleanup_after_upload,
-        resolve_manual_upload_configs, scan_recording_files,
+        ScanRecordingFilesError, load_download_for_manual_upload,
+        resolve_auto_cleanup_after_upload, resolve_manual_upload_configs, scan_recording_files,
     },
-    recording,
+    recording, settings,
     state::SharedState,
 };
 
-pub async fn list_downloads(State(state): State<SharedState>) -> Json<Vec<DownloadConfig>> {
+pub async fn list_downloads(
+    State(state): State<SharedState>,
+) -> (StatusCode, Json<Vec<DownloadConfig>>) {
     match state.db.get_downloads().await {
         Ok(mut downloads) => {
             for d in &mut downloads {
                 d.current_status = Some(resolve_download_status(&state, &d.url));
             }
-            Json(downloads)
+            (StatusCode::OK, Json(downloads))
         }
         Err(e) => {
             tracing::error!("Failed to list downloads: {}", e);
-            Json(vec![])
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(vec![]))
         }
     }
 }
@@ -33,16 +35,84 @@ pub async fn list_downloads(State(state): State<SharedState>) -> Json<Vec<Downlo
 pub async fn add_download(
     State(state): State<SharedState>,
     Json(payload): Json<DownloadConfig>,
-) -> StatusCode {
+) -> (StatusCode, String) {
     let mut config = payload;
     if config.id.is_empty() {
         config.id = Uuid::new_v4().to_string();
     }
+    normalize_download_config(&mut config);
+
+    if let Err((status, message)) = validate_download_config(&state, &config).await {
+        tracing::warn!("Rejected download config update: {}", message);
+        return (status, message);
+    }
+
     if let Err(e) = state.db.save_download(&config).await {
         tracing::error!("Failed to save download: {}", e);
-        return StatusCode::INTERNAL_SERVER_ERROR;
+        return (StatusCode::INTERNAL_SERVER_ERROR, "failed to save download".to_string());
     }
-    StatusCode::OK
+    (StatusCode::OK, String::new())
+}
+
+fn normalize_download_config(config: &mut DownloadConfig) {
+    config.name = config.name.trim().to_string();
+    config.url = config.url.trim().to_string();
+    config.linked_upload_ids = config
+        .linked_upload_ids
+        .iter()
+        .map(|id| id.trim().to_string())
+        .filter(|id| !id.is_empty())
+        .collect();
+    config.current_status = None;
+}
+
+async fn validate_download_config(
+    state: &SharedState,
+    config: &DownloadConfig,
+) -> Result<(), (StatusCode, String)> {
+    if config.name.is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "download name is required".to_string()));
+    }
+    if config.url.is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "download url is required".to_string()));
+    }
+
+    let parsed_url = url::Url::parse(&config.url)
+        .map_err(|_| (StatusCode::BAD_REQUEST, "download url is invalid".to_string()))?;
+    if parsed_url.host_str().is_none() {
+        return Err((StatusCode::BAD_REQUEST, "download url must include a host".to_string()));
+    }
+
+    if config.use_custom_recording_settings {
+        let Some(recording_settings) = config.recording_settings.clone() else {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                "custom recording settings are required when enabled".to_string(),
+            ));
+        };
+        settings::sanitize_recording_settings(recording_settings)
+            .map_err(|message| (StatusCode::BAD_REQUEST, message))?;
+    }
+
+    if !config.linked_upload_ids.is_empty() {
+        let uploads = state.db.get_uploads().await.map_err(|e| {
+            tracing::error!("Failed to validate linked upload templates: {}", e);
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "failed to validate linked upload templates".to_string(),
+            )
+        })?;
+        for linked_id in &config.linked_upload_ids {
+            if !uploads.iter().any(|upload| upload.id == *linked_id) {
+                return Err((
+                    StatusCode::BAD_REQUEST,
+                    format!("linked upload template not found: {}", linked_id),
+                ));
+            }
+        }
+    }
+
+    Ok(())
 }
 
 pub async fn trigger_manual_upload(
@@ -116,8 +186,7 @@ pub async fn trigger_manual_upload(
 
     let live_title = state.checker.fetch_live_title(&download.url).await;
     let task_name = download.name.clone();
-    let auto_cleanup_after_upload =
-        resolve_auto_cleanup_after_upload(&state, &download).await;
+    let auto_cleanup_after_upload = resolve_auto_cleanup_after_upload(&state, &download).await;
 
     let manual_task_id = format!("manual-upload-{}", Uuid::new_v4());
     tracing::info!(
@@ -204,8 +273,27 @@ pub async fn delete_download(
 
 #[cfg(test)]
 mod tests {
-    use super::status_label_for_tasks;
-    use shared::TaskStatus;
+    use super::{normalize_download_config, status_label_for_tasks};
+    use shared::{DownloadConfig, TaskStatus};
+
+    #[test]
+    fn normalize_download_config_trims_fields_and_drops_runtime_status() {
+        let mut config = DownloadConfig {
+            id: "d1".to_string(),
+            name: "  demo  ".to_string(),
+            url: "  https://example.com/live  ".to_string(),
+            linked_upload_ids: vec![" u1 ".to_string(), " ".to_string()],
+            current_status: Some("下载中".to_string()),
+            ..Default::default()
+        };
+
+        normalize_download_config(&mut config);
+
+        assert_eq!(config.name, "demo");
+        assert_eq!(config.url, "https://example.com/live");
+        assert_eq!(config.linked_upload_ids, vec!["u1"]);
+        assert_eq!(config.current_status, None);
+    }
 
     #[test]
     fn status_label_prioritizes_active_states() {

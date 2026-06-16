@@ -43,11 +43,7 @@ pub(super) fn clear_task_handle(state: &SharedState, task_id: &str) {
 }
 
 pub(super) fn resolve_task_name(state: &SharedState, task_id: &str) -> String {
-    if let Some(task) = state.tasks.get(task_id) {
-        task.name.clone()
-    } else {
-        task_id.to_string()
-    }
+    if let Some(task) = state.tasks.get(task_id) { task.name.clone() } else { task_id.to_string() }
 }
 
 pub(super) async fn finish_recording_without_files(
