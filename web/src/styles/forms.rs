@@ -9,6 +9,7 @@ pub const CSS: &str = r#"
   font-weight: 600;
   font-size: 12px;
   margin-left: 6px;
+  white-space: nowrap;
   transition: transform 0.14s ease, box-shadow 0.14s ease, border-color 0.14s ease;
 }
 

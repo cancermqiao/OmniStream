@@ -36,13 +36,14 @@ pub const CSS: &str = r#"
 .table tr:hover td { background: #f8fafc; }
 
 .table .actions {
-  width: 260px;
+  width: 440px;
+  min-width: 440px;
   text-align: right;
-  white-space: normal;
+  white-space: nowrap;
 }
 
 .table .actions .btn {
-  margin-bottom: 4px;
+  margin-bottom: 0;
 }
 
 .empty {

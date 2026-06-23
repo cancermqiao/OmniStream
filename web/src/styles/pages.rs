@@ -129,6 +129,28 @@ pub const CSS: &str = r#"
   color: #be123c;
 }
 
+.toast-layer {
+  position: fixed;
+  top: 18px;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+  padding: 0 16px;
+}
+
+.toast {
+  margin: 0;
+  width: fit-content;
+  max-width: min(560px, calc(100vw - 32px));
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  pointer-events: auto;
+}
+
 @media (max-width: 980px) {
   .page-header { align-items: flex-start; flex-direction: column; }
   .stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }

@@ -167,6 +167,52 @@ pub async fn resume_download(
     (StatusCode::OK, "download monitoring resumed".to_string())
 }
 
+pub async fn clear_download_files(
+    Path(id): Path<String>,
+    State(state): State<SharedState>,
+) -> (StatusCode, String) {
+    let download = match find_download(&state, &id).await {
+        Ok(Some(download)) => download,
+        Ok(None) => return (StatusCode::NOT_FOUND, "download not found".to_string()),
+        Err(e) => {
+            tracing::error!("Failed to load download before clearing files, id={}: {}", id, e);
+            return (StatusCode::INTERNAL_SERVER_ERROR, "failed to load download".to_string());
+        }
+    };
+
+    if has_active_tasks_for_url(&state, &download.url)
+        || state.checking_urls.contains_key(&download.url)
+    {
+        return (StatusCode::CONFLICT, "stop the download before clearing files".to_string());
+    }
+
+    let task_dir = recording::recording_task_dir(&download.name);
+    match tokio::fs::try_exists(&task_dir).await {
+        Ok(false) => (StatusCode::OK, "recording directory is already empty".to_string()),
+        Ok(true) => match tokio::fs::remove_dir_all(&task_dir).await {
+            Ok(()) => (StatusCode::OK, "recording files cleared".to_string()),
+            Err(e) => {
+                tracing::error!(
+                    "Failed to clear recording files, id={}, dir={}: {}",
+                    id,
+                    task_dir.display(),
+                    e
+                );
+                (StatusCode::INTERNAL_SERVER_ERROR, "failed to clear recording files".to_string())
+            }
+        },
+        Err(e) => {
+            tracing::error!(
+                "Failed to inspect recording dir, id={}, dir={}: {}",
+                id,
+                task_dir.display(),
+                e
+            );
+            (StatusCode::INTERNAL_SERVER_ERROR, "failed to inspect recording directory".to_string())
+        }
+    }
+}
+
 async fn find_download(
     state: &SharedState,
     id: &str,
@@ -202,6 +248,13 @@ async fn stop_active_tasks_for_url(state: &SharedState, url: &str) -> usize {
     }
 
     stopped_count
+}
+
+fn has_active_tasks_for_url(state: &SharedState, url: &str) -> bool {
+    state.tasks.iter().any(|entry| {
+        entry.value().url == url
+            && matches!(entry.value().status, TaskStatus::Recording | TaskStatus::Uploading)
+    })
 }
 
 fn is_supported_download_scheme(scheme: &str) -> bool {

@@ -61,12 +61,32 @@ pub fn App() -> Element {
         }
     });
 
+    use_effect(move || {
+        let Some(current_message) = operation_message() else {
+            return;
+        };
+        spawn(async move {
+            TimeoutFuture::new(5000).await;
+            if operation_message() == Some(current_message) {
+                operation_message.set(None);
+            }
+        });
+    });
+
     let snapshot = data();
 
     rsx! {
         document::Link { rel: "icon", href: "/assets/favicon.svg", r#type: "image/svg+xml" }
         div { class: "app-shell",
             style { "{theme_css()}" }
+            if let Some(msg) = operation_message() {
+                div { class: "toast-layer",
+                    p {
+                        class: if operation_error() { "status-banner toast status-error" } else { "status-banner toast" },
+                        "{msg}"
+                    }
+                }
+            }
 
             div { class: "layout",
                 aside { class: "sidebar",
@@ -96,12 +116,6 @@ pub fn App() -> Element {
                 }
 
                 main { class: "content",
-                    if let Some(msg) = operation_message() {
-                        p {
-                            class: if operation_error() { "status-banner status-error" } else { "status-banner" },
-                            "{msg}"
-                        }
-                    }
                     match active_tab() {
                         Tab::Downloads => rsx! {
                             DownloadsPage {
@@ -203,17 +217,17 @@ pub fn App() -> Element {
                                         data.set(next);
                                     }
                                 },
-                                on_stop: move |id: String| async move {
-                                    operation_message.set(Some("正在停止下载任务...".to_string()));
+                                on_stop: move |(id, name): (String, String)| async move {
+                                    operation_message.set(Some(format!("正在停止下载任务「{name}」...")));
                                     operation_error.set(false);
 
                                     match api::stop_download(api_url, &id).await {
                                         Ok(_) => {
-                                            operation_message.set(Some("下载任务已停止，并已暂停自动监听。".to_string()));
+                                            operation_message.set(Some(format!("下载任务「{name}」已停止，并已暂停自动监听。")));
                                             operation_error.set(false);
                                         }
                                         Err(e) => {
-                                            operation_message.set(Some(format!("停止下载任务失败：{e}")));
+                                            operation_message.set(Some(format!("停止下载任务「{name}」失败：{e}")));
                                             operation_error.set(true);
                                         }
                                     }
@@ -224,17 +238,17 @@ pub fn App() -> Element {
                                         data.set(next);
                                     }
                                 },
-                                on_resume: move |id: String| async move {
-                                    operation_message.set(Some("正在恢复下载任务监听...".to_string()));
+                                on_resume: move |(id, name): (String, String)| async move {
+                                    operation_message.set(Some(format!("正在恢复下载任务「{name}」监听...")));
                                     operation_error.set(false);
 
                                     match api::resume_download(api_url, &id).await {
                                         Ok(_) => {
-                                            operation_message.set(Some("下载任务已恢复监听。".to_string()));
+                                            operation_message.set(Some(format!("下载任务「{name}」已恢复监听。")));
                                             operation_error.set(false);
                                         }
                                         Err(e) => {
-                                            operation_message.set(Some(format!("恢复下载任务失败：{e}")));
+                                            operation_message.set(Some(format!("恢复下载任务「{name}」失败：{e}")));
                                             operation_error.set(true);
                                         }
                                     }
@@ -243,6 +257,21 @@ pub fn App() -> Element {
                                         let mut next = data();
                                         next.downloads = v;
                                         data.set(next);
+                                    }
+                                },
+                                on_clear_files: move |(id, name): (String, String)| async move {
+                                    operation_message.set(Some(format!("正在清空下载任务「{name}」的本地文件...")));
+                                    operation_error.set(false);
+
+                                    match api::clear_download_files(api_url, &id).await {
+                                        Ok(_) => {
+                                            operation_message.set(Some(format!("下载任务「{name}」的本地文件已清空。")));
+                                            operation_error.set(false);
+                                        }
+                                        Err(e) => {
+                                            operation_message.set(Some(format!("清空下载任务「{name}」文件失败：{e}")));
+                                            operation_error.set(true);
+                                        }
                                     }
                                 },
                                 manual_upload_message: manual_upload_message(),

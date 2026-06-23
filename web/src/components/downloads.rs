@@ -11,8 +11,9 @@ pub fn DownloadsPage(
     on_batch_delete: EventHandler<Vec<String>>,
     on_batch_bind_uploads: EventHandler<(Vec<String>, Vec<String>)>,
     on_manual_upload: EventHandler<String>,
-    on_stop: EventHandler<String>,
-    on_resume: EventHandler<String>,
+    on_stop: EventHandler<(String, String)>,
+    on_resume: EventHandler<(String, String)>,
+    on_clear_files: EventHandler<(String, String)>,
     manual_upload_message: Option<String>,
     manual_upload_error: bool,
 ) -> Element {
@@ -179,11 +180,17 @@ pub fn DownloadsPage(
                                     let d_id_for_manual_upload = d_id.clone();
                                     let d_id_for_stop = d_id.clone();
                                     let d_id_for_resume = d_id.clone();
+                                    let d_id_for_clear_files = d_id.clone();
+                                    let d_name = d.name.clone();
+                                    let d_name_for_stop = d_name.clone();
+                                    let d_name_for_resume = d_name.clone();
+                                    let d_name_for_clear_files = d_name.clone();
                                     let checked = selected_ids().contains(&d.id);
                                     let status_label =
                                         d.current_status.clone().unwrap_or_else(|| "未知".to_string());
                                     let status_class = status_class(&status_label);
                                     let can_stop = matches!(status_label.as_str(), "下载中" | "上传中" | "检测中");
+                                    let can_clear_files = !matches!(status_label.as_str(), "下载中" | "上传中" | "检测中");
                                     rsx! {
                                         tr {
                                             td {
@@ -222,16 +229,26 @@ pub fn DownloadsPage(
                                             td { class: "actions",
                                                 button { class: "btn btn-ghost", onclick: move |_| on_edit.call(d_for_edit.clone()), "编辑" }
                                                 if !d.enabled {
-                                                    button { class: "btn btn-primary", onclick: move |_| on_resume.call(d_id_for_resume.clone()), "恢复监听" }
+                                                    button {
+                                                        class: "btn btn-primary",
+                                                        onclick: move |_| on_resume.call((d_id_for_resume.clone(), d_name_for_resume.clone())),
+                                                        "恢复监听"
+                                                    }
                                                 } else {
                                                     button {
                                                         class: "btn btn-warning",
                                                         disabled: !can_stop,
-                                                        onclick: move |_| on_stop.call(d_id_for_stop.clone()),
+                                                        onclick: move |_| on_stop.call((d_id_for_stop.clone(), d_name_for_stop.clone())),
                                                         "停止"
                                                     }
                                                 }
                                                 button { class: "btn btn-primary", onclick: move |_| on_manual_upload.call(d_id_for_manual_upload.clone()), "手动上传" }
+                                                button {
+                                                    class: "btn btn-ghost",
+                                                    disabled: !can_clear_files,
+                                                    onclick: move |_| on_clear_files.call((d_id_for_clear_files.clone(), d_name_for_clear_files.clone())),
+                                                    "清空文件"
+                                                }
                                                 button { class: "btn btn-danger", onclick: move |_| on_delete.call(d_id_for_delete.clone()), "删除" }
                                             }
                                         }
