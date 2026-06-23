@@ -5,6 +5,9 @@ on:
     branches: ["**"]
   pull_request:
 
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
   rust-checks:
     runs-on: ubuntu-latest
@@ -28,6 +31,23 @@ jobs:
 
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
+
+  web-wasm-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check Web WASM build target
+        run: cargo check -p app --target wasm32-unknown-unknown
 
   dependency-audit:
     runs-on: ubuntu-latest

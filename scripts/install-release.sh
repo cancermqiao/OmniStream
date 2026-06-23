@@ -1,0 +1,104 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO="${OMNISTREAM_REPO:-}"
+TAG="${OMNISTREAM_TAG:-latest}"
+ARCH="${OMNISTREAM_ARCH:-linux-amd64}"
+INSTALL_DIR="${OMNISTREAM_HOME:-$HOME/omnistream}"
+API_BASE="${GITHUB_API_URL:-https://api.github.com}"
+
+usage() {
+  cat <<'EOF'
+Usage:
+  install-release.sh --repo OWNER/REPO [--tag vX.Y.Z|latest] [--arch linux-amd64|linux-arm64] [--dir /opt/omnistream]
+
+Examples:
+  curl -fsSL https://raw.githubusercontent.com/OWNER/REPO/main/scripts/install-release.sh \
+    | bash -s -- --repo OWNER/REPO --tag latest --arch linux-amd64 --dir /opt/omnistream
+
+Environment overrides:
+  OMNISTREAM_REPO, OMNISTREAM_TAG, OMNISTREAM_ARCH, OMNISTREAM_HOME
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --repo)
+      REPO="$2"
+      shift 2
+      ;;
+    --tag)
+      TAG="$2"
+      shift 2
+      ;;
+    --arch)
+      ARCH="$2"
+      shift 2
+      ;;
+    --dir)
+      INSTALL_DIR="$2"
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "unknown argument: $1"
+      usage
+      exit 1
+      ;;
+  esac
+done
+
+if [[ -z "$REPO" ]]; then
+  echo "--repo OWNER/REPO is required"
+  usage
+  exit 1
+fi
+
+case "$ARCH" in
+  linux-amd64|linux-arm64) ;;
+  *)
+    echo "unsupported arch: $ARCH"
+    exit 1
+    ;;
+esac
+
+for cmd in curl python3 tar; do
+  if ! command -v "$cmd" >/dev/null 2>&1; then
+    echo "missing required command: $cmd"
+    exit 1
+  fi
+done
+
+if [[ "$TAG" == "latest" ]]; then
+  RELEASE_URL="$API_BASE/repos/$REPO/releases/latest"
+else
+  RELEASE_URL="$API_BASE/repos/$REPO/releases/tags/$TAG"
+fi
+
+ASSET_NAME="omnistream-${ARCH}.tar.gz"
+DOWNLOAD_URL="$(curl -fsSL "$RELEASE_URL" \
+  | python3 -c 'import json,sys; data=json.load(sys.stdin); name=sys.argv[1]; matches=[a["browser_download_url"] for a in data.get("assets", []) if a.get("name")==name]; print(matches[0] if matches else "")' "$ASSET_NAME")"
+
+if [[ -z "$DOWNLOAD_URL" ]]; then
+  echo "release asset not found: $ASSET_NAME"
+  echo "release: $RELEASE_URL"
+  exit 1
+fi
+
+TMP_DIR="$(mktemp -d)"
+trap 'rm -rf "$TMP_DIR"' EXIT
+
+echo "Downloading $ASSET_NAME ..."
+curl -fL "$DOWNLOAD_URL" -o "$TMP_DIR/$ASSET_NAME"
+
+mkdir -p "$INSTALL_DIR"
+tar -xzf "$TMP_DIR/$ASSET_NAME" -C "$INSTALL_DIR" --strip-components=1
+chmod +x "$INSTALL_DIR/bin/server" "$INSTALL_DIR/scripts/release-start.sh" "$INSTALL_DIR/scripts/release-stop.sh"
+
+echo "Installed OmniStream to $INSTALL_DIR"
+echo "Next steps:"
+echo "  cd $INSTALL_DIR"
+echo "  ./scripts/release-start.sh"

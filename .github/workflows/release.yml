@@ -1,0 +1,276 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Release tag to publish, for example v0.1.0"
+        required: true
+        type: string
+      build_android:
+        description: "Build unsigned Android package"
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  quality-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+          targets: wasm32-unknown-unknown
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Format Check
+        run: cargo fmt --all -- --check
+
+      - name: Test
+        run: cargo test --workspace --all-targets
+
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Check Web WASM build target
+        run: cargo check -p app --target wasm32-unknown-unknown
+
+  web-static:
+    needs: quality-gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install Dioxus CLI
+        run: cargo install dioxus-cli --locked
+
+      - name: Build Web
+        working-directory: web
+        run: dx build --platform web --release
+
+      - name: Package Web static files
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          tar -czf release-assets/omnistream-web-static.tar.gz \
+            -C target/dx/app/release/web/public .
+
+      - name: Upload Web artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-static
+          path: release-assets/omnistream-web-static.tar.gz
+
+  linux-package:
+    needs: quality-gate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-amd64
+            runner: ubuntu-24.04
+          - name: linux-arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install Dioxus CLI
+        run: cargo install dioxus-cli --locked
+
+      - name: Build server binary
+        run: cargo build --release -p server --bin server
+
+      - name: Build Web
+        working-directory: web
+        run: dx build --platform web --release
+
+      - name: Package runtime bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle="omnistream-${{ matrix.name }}"
+          mkdir -p "release-assets/$bundle/bin" "release-assets/$bundle/web/public" "release-assets/$bundle/scripts"
+          cp target/release/server "release-assets/$bundle/bin/server"
+          cp -R target/dx/app/release/web/public/. "release-assets/$bundle/web/public/"
+          cp scripts/web_proxy_server.py "release-assets/$bundle/scripts/web_proxy_server.py"
+          cp scripts/release-start.sh "release-assets/$bundle/scripts/release-start.sh"
+          cp scripts/release-stop.sh "release-assets/$bundle/scripts/release-stop.sh"
+          chmod +x "release-assets/$bundle/bin/server" "release-assets/$bundle/scripts/"*.sh
+          tar -czf "release-assets/$bundle.tar.gz" -C release-assets "$bundle"
+
+      - name: Upload Linux package
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: release-assets/omnistream-${{ matrix.name }}.tar.gz
+
+  desktop-package:
+    needs: quality-gate
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: desktop-linux-amd64
+            runner: ubuntu-24.04
+            binary: app
+          - name: desktop-macos-arm64
+            runner: macos-14
+            binary: app
+          - name: desktop-windows-amd64
+            runner: windows-latest
+            binary: app.exe
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Linux desktop dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build Desktop
+        run: cargo build --release -p app --no-default-features --features desktop
+
+      - name: Package Desktop
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          cp "target/release/${{ matrix.binary }}" "release-assets/${{ matrix.binary }}"
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            7z a "release-assets/omnistream-${{ matrix.name }}.zip" "release-assets/${{ matrix.binary }}"
+          else
+            tar -czf "release-assets/omnistream-${{ matrix.name }}.tar.gz" -C release-assets "${{ matrix.binary }}"
+          fi
+
+      - name: Upload Desktop artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: |
+            release-assets/omnistream-${{ matrix.name }}.tar.gz
+            release-assets/omnistream-${{ matrix.name }}.zip
+
+  android-package:
+    if: github.event_name == 'workflow_dispatch' && inputs.build_android
+    needs: quality-gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install Dioxus CLI
+        run: cargo install dioxus-cli --locked
+
+      - name: Build Android package
+        working-directory: web
+        run: dx bundle --platform android --release
+
+      - name: Collect Android artifacts
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets/android
+          find target web -type f \( -name "*.apk" -o -name "*.aab" \) -exec cp {} release-assets/android/ \;
+          test -n "$(find release-assets/android -type f)"
+          tar -czf release-assets/omnistream-android-unsigned.tar.gz -C release-assets android
+
+      - name: Upload Android artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-unsigned
+          path: release-assets/omnistream-android-unsigned.tar.gz
+
+  publish-github-release:
+    needs:
+      - web-static
+      - linux-package
+      - desktop-package
+      - android-package
+    if: >
+      always()
+      && needs.web-static.result == 'success'
+      && needs.linux-package.result == 'success'
+      && needs.desktop-package.result == 'success'
+      && (needs.android-package.result == 'success' || needs.android-package.result == 'skipped')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve release tag
+        id: release
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${{ inputs.release_tag }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release.outputs.tag }}
+          files: release-assets/*
+          generate_release_notes: true

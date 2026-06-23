@@ -109,6 +109,34 @@ BILIUP_API_URL=http://<server-ip>:3000/api dx serve --platform android
 ## 📘 前端流程文档
 
 - `docs/web-flow.md`：Web 前端模块、状态流转、API 时序与页面逻辑图。
+- `docs/release-deployment.md`：GitHub Actions Release、二进制产物和腾讯云部署方案。
+
+## 📦 Release 与二进制部署
+
+推送 `v*` tag 后，GitHub Actions 会生成 Web 静态包、Linux 服务端整包和 PC 桌面端包。腾讯云等 Linux 服务器推荐直接下载 `omnistream-linux-amd64.tar.gz` 或 `omnistream-linux-arm64.tar.gz` 运行。
+
+服务器最小运行依赖：
+
+```bash
+sudo apt-get update
+sudo apt-get install -y ca-certificates curl ffmpeg python3 streamlink
+```
+
+一键安装最新 Release：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/OWNER/REPO/main/scripts/install-release.sh \
+  | bash -s -- --repo OWNER/REPO --tag latest --arch linux-amd64 --dir /opt/omnistream
+```
+
+启动服务：
+
+```bash
+cd /opt/omnistream
+WEB_PORT=8080 API_PORT=3000 ./scripts/release-start.sh
+```
+
+更多发布与部署细节见 `docs/release-deployment.md`。
 
 ## 🛠️ 项目结构
 
