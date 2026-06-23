@@ -171,6 +171,7 @@ pub fn DownloadModal(
                                 url: url(),
                                 linked_upload_ids: linked(),
                                 current_status: None,
+                                enabled: config.enabled,
                                 use_custom_recording_settings: use_custom_recording_settings(),
                                 recording_settings: if use_custom_recording_settings() {
                                     Some(task_settings)
