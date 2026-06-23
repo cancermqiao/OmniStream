@@ -19,6 +19,14 @@ pub fn DownloadsPage(
     let mut selected_ids = use_signal::<Vec<String>>(Vec::new);
     let mut bind_upload_ids = use_signal::<Vec<String>>(Vec::new);
 
+    let total_count = downloads.len();
+    let linked_count = downloads.iter().filter(|d| !d.linked_upload_ids.is_empty()).count();
+    let active_count = downloads
+        .iter()
+        .filter(|d| {
+            matches!(d.current_status.as_deref(), Some("下载中") | Some("上传中") | Some("检测中"))
+        })
+        .count();
     let keyword = search().to_lowercase();
     let mut rows: Vec<DownloadConfig> = downloads
         .into_iter()
@@ -43,6 +51,29 @@ pub fn DownloadsPage(
                     p { "管理直播间地址及关联上传任务。" }
                 }
                 button { class: "btn btn-primary", onclick: move |_| on_create.call(()), "新建下载任务" }
+            }
+
+            div { class: "stat-grid",
+                div { class: "stat-card",
+                    p { class: "stat-label", "下载任务" }
+                    p { class: "stat-value", "{total_count}" }
+                    p { class: "stat-hint", "全部录制入口" }
+                }
+                div { class: "stat-card",
+                    p { class: "stat-label", "运行中" }
+                    p { class: "stat-value", "{active_count}" }
+                    p { class: "stat-hint", "下载 / 上传 / 检测" }
+                }
+                div { class: "stat-card",
+                    p { class: "stat-label", "已关联上传" }
+                    p { class: "stat-value", "{linked_count}" }
+                    p { class: "stat-hint", "可一键转入上传流程" }
+                }
+                div { class: "stat-card",
+                    p { class: "stat-label", "当前筛选" }
+                    p { class: "stat-value", "{rows_view.len()}" }
+                    p { class: "stat-hint", "已选 {selected_ids().len()} 项" }
+                }
             }
 
             div { class: "card",
@@ -70,6 +101,7 @@ pub fn DownloadsPage(
                     }
                     button {
                         class: "btn btn-danger",
+                        disabled: selected_ids().is_empty(),
                         onclick: move |_| on_batch_delete.call(selected_ids()),
                         "批量删除"
                     }
@@ -102,6 +134,7 @@ pub fn DownloadsPage(
                     }
                     button {
                         class: "btn btn-primary",
+                        disabled: selected_ids().is_empty(),
                         onclick: move |_| {
                             on_batch_bind_uploads.call((selected_ids(), bind_upload_ids()));
                             selected_ids.set(vec![]);
@@ -111,81 +144,99 @@ pub fn DownloadsPage(
                 }
                 if let Some(msg) = manual_upload_message.clone() {
                     p {
-                        class: if manual_upload_error { "status status-error" } else { "status" },
+                        class: if manual_upload_error { "status-banner status-error" } else { "status-banner" },
                         "{msg}"
                     }
                 }
             }
 
             div { class: "card",
-                table { class: "table",
-                    thead {
-                        tr {
-                            th { "选择" }
-                            th { "任务名称" }
-                            th { "直播地址" }
-                            th { "当前状态" }
-                            th { "关联上传任务" }
-                            th { class: "actions", "操作" }
+                div { class: "table-wrap",
+                    table { class: "table",
+                        thead {
+                            tr {
+                                th { "选择" }
+                                th { "任务名称" }
+                                th { "直播地址" }
+                                th { "当前状态" }
+                                th { "关联上传任务" }
+                                th { class: "actions", "操作" }
+                            }
                         }
-                    }
-                    tbody {
-                        if rows_view.is_empty() {
-                            tr { td { colspan: "6", class: "empty", "暂无下载任务" } }
-                        }
-                        {
-                            rows_view.into_iter().map(|d| {
-                                let d_for_edit = d.clone();
-                                let d_id = d.id.clone();
-                                let d_id_for_check = d_id.clone();
-                                let d_id_for_delete = d_id.clone();
-                                let d_id_for_manual_upload = d_id.clone();
-                                let checked = selected_ids().contains(&d.id);
-                                let status_label =
-                                    d.current_status.clone().unwrap_or_else(|| "未知".to_string());
-                                rsx! {
-                                    tr {
-                                        td {
-                                            input {
-                                                r#type: "checkbox",
-                                                checked,
-                                                onchange: move |_| {
-                                                    let mut ids = selected_ids();
-                                                    if ids.contains(&d_id_for_check) {
-                                                        ids.retain(|v| v != &d_id_for_check);
-                                                    } else {
-                                                        ids.push(d_id_for_check.clone());
+                        tbody {
+                            if rows_view.is_empty() {
+                                tr { td { colspan: "6", class: "empty", "暂无下载任务" } }
+                            }
+                            {
+                                rows_view.into_iter().map(|d| {
+                                    let d_for_edit = d.clone();
+                                    let d_id = d.id.clone();
+                                    let d_id_for_check = d_id.clone();
+                                    let d_id_for_delete = d_id.clone();
+                                    let d_id_for_manual_upload = d_id.clone();
+                                    let checked = selected_ids().contains(&d.id);
+                                    let status_label =
+                                        d.current_status.clone().unwrap_or_else(|| "未知".to_string());
+                                    let status_class = status_class(&status_label);
+                                    rsx! {
+                                        tr {
+                                            td {
+                                                input {
+                                                    r#type: "checkbox",
+                                                    checked,
+                                                    onchange: move |_| {
+                                                        let mut ids = selected_ids();
+                                                        if ids.contains(&d_id_for_check) {
+                                                            ids.retain(|v| v != &d_id_for_check);
+                                                        } else {
+                                                            ids.push(d_id_for_check.clone());
+                                                        }
+                                                        selected_ids.set(ids);
+                                                    },
+                                                }
+                                            }
+                                            td { "{d.name}" }
+                                            td { class: "mono text-ellipsis", title: "{d.url}", "{d.url}" }
+                                            td {
+                                                span { class: "{status_class}", "{status_label}" }
+                                            }
+                                            td {
+                                                if d.linked_upload_ids.is_empty() {
+                                                    span { class: "muted", "未关联" }
+                                                } else {
+                                                    {
+                                                        d.linked_upload_ids.iter().filter_map(|id| {
+                                                            uploads.iter().find(|u| &u.id == id).map(|u| rsx! {
+                                                                span { class: "tag tag-info", "{u.name}" }
+                                                            })
+                                                        })
                                                     }
-                                                    selected_ids.set(ids);
-                                                },
+                                                }
                                             }
-                                        }
-                                        td { "{d.name}" }
-                                        td { class: "mono", "{d.url}" }
-                                        td {
-                                            span { class: "tag", "{status_label}" }
-                                        }
-                                        td {
-                                            {
-                                                d.linked_upload_ids.iter().filter_map(|id| {
-                                                    uploads.iter().find(|u| &u.id == id).map(|u| rsx! {
-                                                        span { class: "tag", "{u.name}" }
-                                                    })
-                                                })
+                                            td { class: "actions",
+                                                button { class: "btn btn-ghost", onclick: move |_| on_edit.call(d_for_edit.clone()), "编辑" }
+                                                button { class: "btn btn-primary", onclick: move |_| on_manual_upload.call(d_id_for_manual_upload.clone()), "手动上传" }
+                                                button { class: "btn btn-danger", onclick: move |_| on_delete.call(d_id_for_delete.clone()), "删除" }
                                             }
-                                        }
-                                        td { class: "actions",
-                                            button { class: "btn btn-ghost", onclick: move |_| on_edit.call(d_for_edit.clone()), "编辑" }
-                                            button { class: "btn btn-primary", onclick: move |_| on_manual_upload.call(d_id_for_manual_upload.clone()), "手动上传" }
-                                            button { class: "btn btn-danger", onclick: move |_| on_delete.call(d_id_for_delete.clone()), "删除" }
                                         }
                                     }
-                                }
-                            })
+                                })
+                            }
                         }
                     }
                 }
             }
         }
+    }
+}
+
+fn status_class(label: &str) -> &'static str {
+    match label {
+        "下载中" | "上传中" => "tag tag-success",
+        "检测中" => "tag tag-info",
+        "失败" => "tag tag-danger",
+        "已完成" => "tag tag-success",
+        "已停止" => "tag tag-warning",
+        _ => "tag",
     }
 }

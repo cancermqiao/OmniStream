@@ -16,6 +16,10 @@ pub fn UploadsPage(
     let mut sort_asc = use_signal(|| true);
     let mut selected_ids = use_signal::<Vec<String>>(Vec::new);
 
+    let total_count = uploads.len();
+    let account_count = accounts.len();
+    let configured_count = uploads.iter().filter(|u| !u.config.account_file.is_empty()).count();
+    let tagged_count = uploads.iter().filter(|u| !u.config.tags.is_empty()).count();
     let keyword = search().to_lowercase();
     let mut rows: Vec<UploadTemplate> = uploads
         .into_iter()
@@ -40,6 +44,29 @@ pub fn UploadsPage(
                     p { "管理投稿模板并关联账号与 B 站投稿参数。" }
                 }
                 button { class: "btn btn-primary", onclick: move |_| on_create.call(()), "新建上传任务" }
+            }
+
+            div { class: "stat-grid",
+                div { class: "stat-card",
+                    p { class: "stat-label", "上传模板" }
+                    p { class: "stat-value", "{total_count}" }
+                    p { class: "stat-hint", "可复用投稿配置" }
+                }
+                div { class: "stat-card",
+                    p { class: "stat-label", "可用账号" }
+                    p { class: "stat-value", "{account_count}" }
+                    p { class: "stat-hint", "来自账号管理" }
+                }
+                div { class: "stat-card",
+                    p { class: "stat-label", "已配置账号" }
+                    p { class: "stat-value", "{configured_count}" }
+                    p { class: "stat-hint", "模板绑定账号文件" }
+                }
+                div { class: "stat-card",
+                    p { class: "stat-label", "含标签模板" }
+                    p { class: "stat-value", "{tagged_count}" }
+                    p { class: "stat-hint", "提升投稿检索质量" }
+                }
             }
 
             div { class: "card",
@@ -68,6 +95,7 @@ pub fn UploadsPage(
                     }
                     button {
                         class: "btn btn-danger",
+                        disabled: selected_ids().is_empty(),
                         onclick: move |_| {
                             on_batch_delete.call(selected_ids());
                             selected_ids.set(vec![]);
@@ -78,69 +106,81 @@ pub fn UploadsPage(
             }
 
             div { class: "card",
-                table { class: "table",
-                    thead {
-                        tr {
-                            th { "选择" }
-                            th { "任务名称" }
-                            th { "上传账号" }
-                            th { "视频标题" }
-                            th { "分区" }
-                            th { "简介" }
-                            th { "标签" }
-                            th { class: "actions", "操作" }
+                div { class: "table-wrap",
+                    table { class: "table",
+                        thead {
+                            tr {
+                                th { "选择" }
+                                th { "任务名称" }
+                                th { "上传账号" }
+                                th { "视频标题" }
+                                th { "分区" }
+                                th { "简介" }
+                                th { "标签" }
+                                th { class: "actions", "操作" }
+                            }
                         }
-                    }
-                    tbody {
-                        if rows_view.is_empty() {
-                            tr { td { colspan: "8", class: "empty", "暂无上传任务" } }
-                        }
-                        {
-                            rows_view.into_iter().map(|u| {
-                                let account_name = accounts
-                                    .iter()
-                                    .find(|a| a.account_file == u.config.account_file)
-                                    .map(|a| a.name.clone())
-                                    .unwrap_or_else(|| u.config.account_file.clone());
-                                let u_for_edit = u.clone();
-                                let u_id = u.id.clone();
-                                let u_id_for_check = u_id.clone();
-                                let u_id_for_delete = u_id.clone();
-                                let checked = selected_ids().contains(&u.id);
-                                rsx! {
-                                    tr {
-                                        td {
-                                            input {
-                                                r#type: "checkbox",
-                                                checked,
-                                                onchange: move |_| {
-                                                    let mut ids = selected_ids();
-                                                    if ids.contains(&u_id_for_check) {
-                                                        ids.retain(|v| v != &u_id_for_check);
-                                                    } else {
-                                                        ids.push(u_id_for_check.clone());
+                        tbody {
+                            if rows_view.is_empty() {
+                                tr { td { colspan: "8", class: "empty", "暂无上传任务" } }
+                            }
+                            {
+                                rows_view.into_iter().map(|u| {
+                                    let account_name = accounts
+                                        .iter()
+                                        .find(|a| a.account_file == u.config.account_file)
+                                        .map(|a| a.name.clone())
+                                        .unwrap_or_else(|| u.config.account_file.clone());
+                                    let u_for_edit = u.clone();
+                                    let u_id = u.id.clone();
+                                    let u_id_for_check = u_id.clone();
+                                    let u_id_for_delete = u_id.clone();
+                                    let checked = selected_ids().contains(&u.id);
+                                    rsx! {
+                                        tr {
+                                            td {
+                                                input {
+                                                    r#type: "checkbox",
+                                                    checked,
+                                                    onchange: move |_| {
+                                                        let mut ids = selected_ids();
+                                                        if ids.contains(&u_id_for_check) {
+                                                            ids.retain(|v| v != &u_id_for_check);
+                                                        } else {
+                                                            ids.push(u_id_for_check.clone());
+                                                        }
+                                                        selected_ids.set(ids);
+                                                    },
+                                                }
+                                            }
+                                            td { "{u.name}" }
+                                            td { "{account_name}" }
+                                            td {
+                                                if let Some(title) = u.config.title.clone() {
+                                                    span { class: "text-ellipsis", title: "{title}", "{title}" }
+                                                } else {
+                                                    span { class: "muted", "使用默认标题" }
+                                                }
+                                            }
+                                            td { span { class: "tag tag-info", "{tid_name(u.config.tid)}" } }
+                                            td { class: "text-ellipsis", title: "{u.config.description}", "{u.config.description}" }
+                                            td {
+                                                if u.config.tags.is_empty() {
+                                                    span { class: "muted", "无标签" }
+                                                } else {
+                                                    for t in &u.config.tags {
+                                                        span { class: "tag", "#{t}" }
                                                     }
-                                                    selected_ids.set(ids);
-                                                },
+                                                }
                                             }
-                                        }
-                                        td { "{u.name}" }
-                                        td { "{account_name}" }
-                                        td { "{u.config.title.clone().unwrap_or_default()}" }
-                                        td { "{tid_name(u.config.tid)}" }
-                                        td { "{u.config.description}" }
-                                        td {
-                                            for t in &u.config.tags {
-                                                span { class: "tag", "#{t}" }
+                                            td { class: "actions",
+                                                button { class: "btn btn-ghost", onclick: move |_| on_edit.call(u_for_edit.clone()), "编辑" }
+                                                button { class: "btn btn-danger", onclick: move |_| on_delete.call(u_id_for_delete.clone()), "删除" }
                                             }
-                                        }
-                                        td { class: "actions",
-                                            button { class: "btn btn-ghost", onclick: move |_| on_edit.call(u_for_edit.clone()), "编辑" }
-                                            button { class: "btn btn-danger", onclick: move |_| on_delete.call(u_id_for_delete.clone()), "删除" }
                                         }
                                     }
-                                }
-                            })
+                                })
+                            }
                         }
                     }
                 }

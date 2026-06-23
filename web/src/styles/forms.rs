@@ -9,6 +9,17 @@ pub const CSS: &str = r#"
   font-weight: 600;
   font-size: 12px;
   margin-left: 6px;
+  transition: transform 0.14s ease, box-shadow 0.14s ease, border-color 0.14s ease;
+}
+
+.btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+}
+
+.btn:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
 }
 
 .btn-primary {
@@ -35,6 +46,13 @@ pub const CSS: &str = r#"
   font: inherit;
   color: inherit;
   font-size: 13px;
+  outline: none;
+  transition: border-color 0.14s ease, box-shadow 0.14s ease;
+}
+
+.input:focus {
+  border-color: #14b8a6;
+  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.13);
 }
 
 .field { display: flex; flex-direction: column; gap: 6px; }
@@ -49,6 +67,8 @@ pub const CSS: &str = r#"
 .inline-actions {
   display: flex;
   justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 @media (max-width: 980px) {

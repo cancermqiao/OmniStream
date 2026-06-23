@@ -98,7 +98,7 @@ pub fn App() -> Element {
                 main { class: "content",
                     if let Some(msg) = operation_message() {
                         p {
-                            class: if operation_error() { "status status-error" } else { "status" },
+                            class: if operation_error() { "status-banner status-error" } else { "status-banner" },
                             "{msg}"
                         }
                     }

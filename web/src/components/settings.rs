@@ -24,6 +24,13 @@ pub fn SettingsPage(
     let mut default_quality = use_signal(|| settings.quality.default_quality.clone());
     let mut auto_cleanup_after_upload = use_signal(|| settings.auto_cleanup_after_upload);
     let mut form_error = use_signal::<Option<String>>(|| None);
+    let segment_size_label =
+        settings.segment_size_mb.map(|v| format!("{v} MB")).unwrap_or_else(|| "未限制".to_string());
+    let segment_time_label = settings
+        .segment_time_sec
+        .map(|v| format!("{v} 秒"))
+        .unwrap_or_else(|| "未限制".to_string());
+    let cleanup_label = if settings.auto_cleanup_after_upload { "已开启" } else { "未开启" };
 
     rsx! {
         div { class: "page",
@@ -31,6 +38,29 @@ pub fn SettingsPage(
                 div {
                     h1 { "录制设置" }
                     p { "设置各平台录播画质与单文件分片大小（按体积或时长）。" }
+                }
+            }
+
+            div { class: "stat-grid",
+                div { class: "stat-card",
+                    p { class: "stat-label", "体积分片" }
+                    p { class: "stat-value", "{segment_size_label}" }
+                    p { class: "stat-hint", "留空表示不按体积切分" }
+                }
+                div { class: "stat-card",
+                    p { class: "stat-label", "时长分片" }
+                    p { class: "stat-value", "{segment_time_label}" }
+                    p { class: "stat-hint", "留空表示不按时长切分" }
+                }
+                div { class: "stat-card",
+                    p { class: "stat-label", "默认画质" }
+                    p { class: "stat-value", "{settings.quality.default_quality}" }
+                    p { class: "stat-hint", "平台未单独配置时使用" }
+                }
+                div { class: "stat-card",
+                    p { class: "stat-label", "上传后清理" }
+                    p { class: "stat-value", "{cleanup_label}" }
+                    p { class: "stat-hint", "节省本地录制空间" }
                 }
             }
 
@@ -80,10 +110,10 @@ pub fn SettingsPage(
                 }
 
                 if let Some(err) = form_error() {
-                    p { class: "status status-error", "{err}" }
+                    p { class: "status-banner status-error", "{err}" }
                 } else if let Some(msg) = save_message.clone() {
                     p {
-                        class: if save_error { "status status-error" } else { "status" },
+                        class: if save_error { "status-banner status-error" } else { "status-banner" },
                         "{msg}"
                     }
                 }
