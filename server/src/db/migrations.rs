@@ -11,6 +11,7 @@ const MIGRATIONS: &[Migration] = &[
     Migration { version: 1, name: "create_core_tables" },
     Migration { version: 2, name: "add_tasks_upload_configs" },
     Migration { version: 3, name: "add_download_recording_settings" },
+    Migration { version: 4, name: "add_download_enabled" },
 ];
 
 pub async fn run_migrations(pool: &Pool<Sqlite>) -> Result<(), Box<dyn Error>> {
@@ -121,6 +122,13 @@ async fn apply_migration(pool: &Pool<Sqlite>, migration: Migration) -> Result<()
                     .await?;
             }
         }
+        4 => {
+            if !column_exists(&mut tx, "downloads", "enabled").await? {
+                sqlx::query("ALTER TABLE downloads ADD COLUMN enabled INTEGER DEFAULT 1")
+                    .execute(&mut *tx)
+                    .await?;
+            }
+        }
         _ => return Err(format!("unknown migration version: {}", migration.version).into()),
     }
 
@@ -188,7 +196,7 @@ mod tests {
                 .fetch_all(&pool)
                 .await
                 .expect("fetch versions");
-        assert_eq!(versions, vec![1, 2, 3]);
+        assert_eq!(versions, vec![1, 2, 3, 4]);
 
         let task_columns = column_names(&pool, "tasks").await;
         assert!(task_columns.contains(&"upload_configs".to_string()));
@@ -196,6 +204,7 @@ mod tests {
         let download_columns = column_names(&pool, "downloads").await;
         assert!(download_columns.contains(&"use_custom_recording_settings".to_string()));
         assert!(download_columns.contains(&"recording_settings".to_string()));
+        assert!(download_columns.contains(&"enabled".to_string()));
     }
 
     #[tokio::test]
@@ -274,7 +283,7 @@ mod tests {
                 .fetch_all(&pool)
                 .await
                 .expect("fetch versions");
-        assert_eq!(versions, vec![1, 2, 3]);
+        assert_eq!(versions, vec![1, 2, 3, 4]);
 
         let task_columns = column_names(&pool, "tasks").await;
         assert!(task_columns.contains(&"upload_configs".to_string()));
@@ -282,5 +291,6 @@ mod tests {
         let download_columns = column_names(&pool, "downloads").await;
         assert!(download_columns.contains(&"use_custom_recording_settings".to_string()));
         assert!(download_columns.contains(&"recording_settings".to_string()));
+        assert!(download_columns.contains(&"enabled".to_string()));
     }
 }

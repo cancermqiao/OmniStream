@@ -21,7 +21,7 @@ pub async fn list_downloads(
     match state.db.get_downloads().await {
         Ok(mut downloads) => {
             for d in &mut downloads {
-                d.current_status = Some(resolve_download_status(&state, &d.url));
+                d.current_status = Some(resolve_download_status(&state, d));
             }
             (StatusCode::OK, Json(downloads))
         }
@@ -116,6 +116,92 @@ async fn validate_download_config(
     }
 
     Ok(())
+}
+
+pub async fn stop_download(
+    Path(id): Path<String>,
+    State(state): State<SharedState>,
+) -> (StatusCode, String) {
+    let download = match find_download(&state, &id).await {
+        Ok(Some(download)) => download,
+        Ok(None) => return (StatusCode::NOT_FOUND, "download not found".to_string()),
+        Err(e) => {
+            tracing::error!("Failed to load download before stop, id={}: {}", id, e);
+            return (StatusCode::INTERNAL_SERVER_ERROR, "failed to load download".to_string());
+        }
+    };
+
+    if let Err(e) = state.db.set_download_enabled(&id, false).await {
+        tracing::error!("Failed to disable download, id={}: {}", id, e);
+        return (StatusCode::INTERNAL_SERVER_ERROR, "failed to stop download".to_string());
+    }
+
+    let stopped_count = stop_active_tasks_for_url(&state, &download.url).await;
+    state.checking_urls.remove(&download.url);
+
+    if stopped_count == 0 {
+        (StatusCode::OK, "download monitoring stopped".to_string())
+    } else {
+        (StatusCode::OK, format!("stopped {stopped_count} active task(s)"))
+    }
+}
+
+pub async fn resume_download(
+    Path(id): Path<String>,
+    State(state): State<SharedState>,
+) -> (StatusCode, String) {
+    match find_download(&state, &id).await {
+        Ok(Some(_)) => {}
+        Ok(None) => return (StatusCode::NOT_FOUND, "download not found".to_string()),
+        Err(e) => {
+            tracing::error!("Failed to load download before resume, id={}: {}", id, e);
+            return (StatusCode::INTERNAL_SERVER_ERROR, "failed to load download".to_string());
+        }
+    }
+
+    if let Err(e) = state.db.set_download_enabled(&id, true).await {
+        tracing::error!("Failed to resume download, id={}: {}", id, e);
+        return (StatusCode::INTERNAL_SERVER_ERROR, "failed to resume download".to_string());
+    }
+
+    (StatusCode::OK, "download monitoring resumed".to_string())
+}
+
+async fn find_download(
+    state: &SharedState,
+    id: &str,
+) -> Result<Option<DownloadConfig>, Box<dyn std::error::Error>> {
+    Ok(state.db.get_downloads().await?.into_iter().find(|download| download.id == id))
+}
+
+async fn stop_active_tasks_for_url(state: &SharedState, url: &str) -> usize {
+    let task_ids = state
+        .tasks
+        .iter()
+        .filter(|entry| {
+            entry.value().url == url
+                && matches!(entry.value().status, TaskStatus::Recording | TaskStatus::Uploading)
+        })
+        .map(|entry| entry.key().clone())
+        .collect::<Vec<_>>();
+
+    let mut stopped_count = 0;
+    for task_id in task_ids {
+        if let Some((_, handle)) = state.handles.remove(&task_id) {
+            handle.abort_handle.abort();
+        }
+
+        if let Some(mut task) = state.tasks.get_mut(&task_id) {
+            task.status = TaskStatus::Stopped;
+            stopped_count += 1;
+        }
+
+        if let Err(e) = state.db.update_status(&task_id, &TaskStatus::Stopped).await {
+            tracing::error!("Failed to persist stopped task status, task_id={}: {}", task_id, e);
+        }
+    }
+
+    stopped_count
 }
 
 fn is_supported_download_scheme(scheme: &str) -> bool {
@@ -222,12 +308,17 @@ pub async fn trigger_manual_upload(
     (StatusCode::ACCEPTED, "manual upload started".to_string())
 }
 
-fn resolve_download_status(state: &SharedState, url: &str) -> String {
+fn resolve_download_status(state: &SharedState, download: &DownloadConfig) -> String {
+    if !download.enabled {
+        return "已停止".to_string();
+    }
+
     let mut statuses = Vec::new();
+    let url = &download.url;
     let is_checking = state.checking_urls.contains_key(url);
 
     for task in state.tasks.iter() {
-        if task.value().url != url {
+        if task.value().url.as_str() != url {
             continue;
         }
         statuses.push(task.value().status.clone());
@@ -291,6 +382,7 @@ mod tests {
             url: "  https://example.com/live  ".to_string(),
             linked_upload_ids: vec![" u1 ".to_string(), " ".to_string()],
             current_status: Some("下载中".to_string()),
+            enabled: false,
             ..Default::default()
         };
 
@@ -300,6 +392,7 @@ mod tests {
         assert_eq!(config.url, "https://example.com/live");
         assert_eq!(config.linked_upload_ids, vec!["u1"]);
         assert_eq!(config.current_status, None);
+        assert!(!config.enabled);
     }
 
     #[test]

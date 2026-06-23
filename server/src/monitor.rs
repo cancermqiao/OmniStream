@@ -28,6 +28,10 @@ pub async fn run_monitor(state: SharedState) {
 
         for download in downloads {
             tracing::info!("Monitor checking download config...{:?}", download.name);
+            if !download.enabled {
+                tracing::info!("Monitor skipped disabled download config: {}", download.name);
+                continue;
+            }
 
             let is_busy = state.tasks.iter().any(|r| {
                 r.value().url == download.url

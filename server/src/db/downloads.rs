@@ -7,7 +7,7 @@ use super::Db;
 impl Db {
     pub async fn get_downloads(&self) -> Result<Vec<DownloadConfig>, Box<dyn Error>> {
         let rows = sqlx::query(
-            "SELECT id, name, url, linked_upload_ids, use_custom_recording_settings, recording_settings FROM downloads",
+            "SELECT id, name, url, linked_upload_ids, enabled, use_custom_recording_settings, recording_settings FROM downloads",
         )
             .fetch_all(&self.pool)
             .await?;
@@ -30,6 +30,13 @@ impl Db {
                         }
                     },
                     None => vec![],
+                };
+                let enabled: i64 = match row.try_get("enabled") {
+                    Ok(value) => value,
+                    Err(e) => {
+                        tracing::warn!("Failed to read enabled for download_id={}: {}", id, e);
+                        1
+                    }
                 };
                 let use_custom_recording_settings: i64 = match row
                     .try_get("use_custom_recording_settings")
@@ -77,6 +84,7 @@ impl Db {
                     url: row.get("url"),
                     linked_upload_ids,
                     current_status: None,
+                    enabled: enabled != 0,
                     use_custom_recording_settings: use_custom_recording_settings != 0,
                     recording_settings,
                 }
@@ -95,12 +103,13 @@ impl Db {
 
         sqlx::query(
             r#"
-            INSERT INTO downloads (id, name, url, linked_upload_ids, use_custom_recording_settings, recording_settings)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO downloads (id, name, url, linked_upload_ids, enabled, use_custom_recording_settings, recording_settings)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 name = excluded.name,
                 url = excluded.url,
                 linked_upload_ids = excluded.linked_upload_ids,
+                enabled = excluded.enabled,
                 use_custom_recording_settings = excluded.use_custom_recording_settings,
                 recording_settings = excluded.recording_settings
             "#,
@@ -109,11 +118,25 @@ impl Db {
         .bind(&config.name)
         .bind(&config.url)
         .bind(ids_json)
+        .bind(if config.enabled { 1 } else { 0 })
         .bind(use_custom_recording_settings)
         .bind(recording_settings_json)
         .execute(&self.pool)
         .await?;
 
+        Ok(())
+    }
+
+    pub async fn set_download_enabled(
+        &self,
+        id: &str,
+        enabled: bool,
+    ) -> Result<(), Box<dyn Error>> {
+        sqlx::query("UPDATE downloads SET enabled = ? WHERE id = ?")
+            .bind(if enabled { 1 } else { 0 })
+            .bind(id)
+            .execute(&self.pool)
+            .await?;
         Ok(())
     }
 

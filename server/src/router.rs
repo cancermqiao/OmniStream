@@ -13,6 +13,8 @@ pub fn build_router(state: SharedState) -> Router {
         .route("/api/downloads", get(downloads::list_downloads).post(downloads::add_download))
         .route("/api/downloads/{id}", delete(downloads::delete_download))
         .route("/api/downloads/{id}/upload", post(downloads::trigger_manual_upload))
+        .route("/api/downloads/{id}/stop", post(downloads::stop_download))
+        .route("/api/downloads/{id}/resume", post(downloads::resume_download))
         .route("/api/uploads", get(uploads::list_uploads).post(uploads::add_upload))
         .route("/api/uploads/{id}", delete(uploads::delete_upload))
         .route("/api/accounts", get(accounts::list_accounts))

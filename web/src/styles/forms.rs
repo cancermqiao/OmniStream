@@ -28,6 +28,12 @@ pub const CSS: &str = r#"
   border-color: #0f766e;
 }
 
+.btn-warning {
+  background: #fffbeb;
+  color: #b45309;
+  border-color: #fde68a;
+}
+
 .btn-danger {
   background: #fff1f2;
   color: #be123c;

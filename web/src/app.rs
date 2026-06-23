@@ -203,6 +203,48 @@ pub fn App() -> Element {
                                         data.set(next);
                                     }
                                 },
+                                on_stop: move |id: String| async move {
+                                    operation_message.set(Some("正在停止下载任务...".to_string()));
+                                    operation_error.set(false);
+
+                                    match api::stop_download(api_url, &id).await {
+                                        Ok(_) => {
+                                            operation_message.set(Some("下载任务已停止，并已暂停自动监听。".to_string()));
+                                            operation_error.set(false);
+                                        }
+                                        Err(e) => {
+                                            operation_message.set(Some(format!("停止下载任务失败：{e}")));
+                                            operation_error.set(true);
+                                        }
+                                    }
+
+                                    if let Some(v) = api::fetch_downloads(api_url).await {
+                                        let mut next = data();
+                                        next.downloads = v;
+                                        data.set(next);
+                                    }
+                                },
+                                on_resume: move |id: String| async move {
+                                    operation_message.set(Some("正在恢复下载任务监听...".to_string()));
+                                    operation_error.set(false);
+
+                                    match api::resume_download(api_url, &id).await {
+                                        Ok(_) => {
+                                            operation_message.set(Some("下载任务已恢复监听。".to_string()));
+                                            operation_error.set(false);
+                                        }
+                                        Err(e) => {
+                                            operation_message.set(Some(format!("恢复下载任务失败：{e}")));
+                                            operation_error.set(true);
+                                        }
+                                    }
+
+                                    if let Some(v) = api::fetch_downloads(api_url).await {
+                                        let mut next = data();
+                                        next.downloads = v;
+                                        data.set(next);
+                                    }
+                                },
                                 manual_upload_message: manual_upload_message(),
                                 manual_upload_error: manual_upload_error(),
                             }

@@ -71,7 +71,11 @@ impl Default for UploadConfig {
 }
 
 // 对应前端 Download 配置
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+fn default_download_enabled() -> bool {
+    true
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct DownloadConfig {
     pub id: String,
     pub name: String,
@@ -80,10 +84,27 @@ pub struct DownloadConfig {
     pub linked_upload_ids: Vec<String>, // 关联的 UploadTemplate ID 列表
     #[serde(default)]
     pub current_status: Option<String>, // 当前运行状态（实时计算，不落库）
+    #[serde(default = "default_download_enabled")]
+    pub enabled: bool, // 是否启用自动监听
     #[serde(default)]
     pub use_custom_recording_settings: bool, // 是否启用任务级录制设置
     #[serde(default)]
     pub recording_settings: Option<RecordingSettings>, // 任务级录制设置
+}
+
+impl Default for DownloadConfig {
+    fn default() -> Self {
+        Self {
+            id: String::new(),
+            name: String::new(),
+            url: String::new(),
+            linked_upload_ids: vec![],
+            current_status: None,
+            enabled: true,
+            use_custom_recording_settings: false,
+            recording_settings: None,
+        }
+    }
 }
 
 // 对应前端 Upload 配置 (模板)
@@ -156,7 +177,7 @@ pub trait StreamChecker: Send + Sync {
 
 #[cfg(test)]
 mod tests {
-    use super::{TaskStatus, UploadConfig};
+    use super::{DownloadConfig, TaskStatus, UploadConfig};
 
     #[test]
     fn upload_config_default_values_are_stable() {
@@ -181,5 +202,15 @@ mod tests {
     fn task_status_stopped_serializes_stably() {
         let json = serde_json::to_string(&TaskStatus::Stopped).expect("serialize stopped status");
         assert_eq!(json, "\"Stopped\"");
+    }
+
+    #[test]
+    fn download_config_defaults_to_enabled() {
+        let config = DownloadConfig::default();
+        assert!(config.enabled);
+
+        let json = r#"{"id":"d1","name":"demo","url":"https://example.com"}"#;
+        let config: DownloadConfig = serde_json::from_str(json).expect("valid download config");
+        assert!(config.enabled);
     }
 }

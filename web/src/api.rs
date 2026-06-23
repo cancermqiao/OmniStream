@@ -151,6 +151,32 @@ pub async fn delete_download(api_url: &str, id: &str) -> Result<(), String> {
     Err(last_err)
 }
 
+pub async fn stop_download(api_url: &str, id: &str) -> Result<String, String> {
+    post_download_action(api_url, id, "stop").await
+}
+
+pub async fn resume_download(api_url: &str, id: &str) -> Result<String, String> {
+    post_download_action(api_url, id, "resume").await
+}
+
+async fn post_download_action(api_url: &str, id: &str, action: &str) -> Result<String, String> {
+    let mut last_err = "request not sent".to_string();
+    for base in api_bases(api_url) {
+        let endpoint = join_url(&base, &format!("/downloads/{id}/{action}"));
+        match reqwest::Client::new().post(&endpoint).send().await {
+            Ok(resp) => {
+                if resp.status().is_success() {
+                    let body = resp.text().await.unwrap_or_default();
+                    return Ok(body);
+                }
+                last_err = response_error(&endpoint, resp).await;
+            }
+            Err(e) => last_err = format!("{endpoint} -> {e}"),
+        }
+    }
+    Err(last_err)
+}
+
 pub async fn save_upload(api_url: &str, payload: &UploadTemplate) -> Result<(), String> {
     let mut last_err = "request not sent".to_string();
     for base in api_bases(api_url) {
