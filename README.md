@@ -64,10 +64,9 @@ chmod +x start-bin.sh
 该脚本会：
 1. 启动前自动执行后端编译：`cargo build --release -p server --bin server`。
 2. 自动检测前端产物目录（优先 `target/dx/app/release/web/public`），若缺失会自动执行 `dx build --platform web --release`。
-3. 使用 `target/release/server` 启动后端。
-4. 使用 `python3 -m http.server` 托管前端静态文件。
-5. 将日志输出到 `server.log` 和 `web.log`。
-6. 可使用 `./stop.sh` 一键停止后端与前端。
+3. 使用 `target/release/server` 启动后端，并由后端内置托管 Web 静态文件。
+4. 将日志输出到 `server.log`。
+5. 可使用 `./stop.sh` 一键停止服务。
 
 ### 4. 手动启动
 
@@ -119,7 +118,7 @@ BILIUP_API_URL=http://<server-ip>:3000/api dx serve --platform android
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y ca-certificates curl ffmpeg python3 streamlink
+sudo apt-get install -y ca-certificates curl ffmpeg streamlink
 ```
 
 一键安装最新 Release：
@@ -133,7 +132,7 @@ curl -fsSL https://raw.githubusercontent.com/OWNER/REPO/main/scripts/install-rel
 
 ```bash
 cd /opt/omnistream
-WEB_PORT=8080 API_PORT=3000 ./scripts/release-start.sh
+API_PORT=3000 ./scripts/release-start.sh
 ```
 
 更多发布与部署细节见 `docs/release-deployment.md`。

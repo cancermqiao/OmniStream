@@ -11,12 +11,9 @@ echo -e "${BLUE}=== OmniStream Binary Startup ===${NC}"
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SERVER_BIN="target/release/server"
 WEB_DIST_DIR=""
-WEB_PORT="${WEB_PORT:-8080}"
 API_PORT="${API_PORT:-3000}"
-WEB_PROXY_SCRIPT="${ROOT_DIR}/scripts/web_proxy_server.py"
 PID_DIR=".run"
 SERVER_PID_FILE="${PID_DIR}/server.pid"
-WEB_PID_FILE="${PID_DIR}/web.pid"
 DB_FILE="${ROOT_DIR}/data/omnistream.db"
 COOKIES_DIR="${ROOT_DIR}/data/cookies"
 RECORDINGS_DIR="${ROOT_DIR}/data/recordings"
@@ -49,7 +46,6 @@ ensure_not_running() {
 }
 
 ensure_not_running "Backend Server" "$SERVER_PID_FILE"
-ensure_not_running "Frontend Web" "$WEB_PID_FILE"
 
 resolve_web_dir() {
     local candidates=(
@@ -85,18 +81,8 @@ if ! command -v curl &> /dev/null; then
     exit 1
 fi
 
-if ! command -v python3 &> /dev/null; then
-    echo -e "${RED}Error: python3 is required to serve web static files.${NC}"
-    exit 1
-fi
-
 if ! command -v cargo &> /dev/null; then
     echo -e "${RED}Error: cargo is required to build backend binary.${NC}"
-    exit 1
-fi
-
-if [ ! -f "$WEB_PROXY_SCRIPT" ]; then
-    echo -e "${RED}Error: missing web proxy script: ${WEB_PROXY_SCRIPT}${NC}"
     exit 1
 fi
 
@@ -132,35 +118,26 @@ rebuild_web_assets() {
 
 web_assets_stale() {
     local index_html="$1"
-    python3 - "$ROOT_DIR" "$index_html" <<'PYCHK'
-import sys
-from pathlib import Path
+    if [ ! -f "$index_html" ]; then
+        echo "stale"
+        return
+    fi
 
-root = Path(sys.argv[1])
-index_html = Path(sys.argv[2])
+    for path in "$ROOT_DIR/web/src" "$ROOT_DIR/web/assets" "$ROOT_DIR/web/Cargo.toml" "$ROOT_DIR/web/Dioxus.toml"; do
+        if [ ! -e "$path" ]; then
+            continue
+        fi
+        if [ -f "$path" ] && [ "$path" -nt "$index_html" ]; then
+            echo "stale"
+            return
+        fi
+        if [ -d "$path" ] && find "$path" -type f -newer "$index_html" | grep -q .; then
+            echo "stale"
+            return
+        fi
+    done
 
-if not index_html.exists():
-    print("stale")
-    raise SystemExit(0)
-
-index_mtime = index_html.stat().st_mtime
-watched = [root / "web" / "src", root / "web" / "assets", root / "web" / "Cargo.toml", root / "web" / "Dioxus.toml"]
-
-for path in watched:
-    if not path.exists():
-        continue
-    if path.is_file():
-        if path.stat().st_mtime > index_mtime:
-            print("stale")
-            raise SystemExit(0)
-        continue
-    for f in path.rglob("*"):
-        if f.is_file() and f.stat().st_mtime > index_mtime:
-            print("stale")
-            raise SystemExit(0)
-
-print("fresh")
-PYCHK
+    echo "fresh"
 }
 
 if ! resolve_web_dir; then
@@ -201,9 +178,9 @@ else
     echo -e "${RED}Warning: favicon source not found: ${FAVICON_SRC}${NC}"
 fi
 
-# 4. 启动后端
-echo -e "${GREEN}Starting Backend Server Binary...${NC}"
-BILIUP_DB_PATH="$DB_FILE" BILIUP_COOKIES_DIR="$COOKIES_DIR" BILIUP_RECORDINGS_DIR="$RECORDINGS_DIR" nohup "$SERVER_BIN" > server.log 2>&1 &
+# 4. 启动后端（内置 Web 静态文件托管）
+echo -e "${GREEN}Starting Backend Server Binary with embedded Web UI...${NC}"
+API_PORT="$API_PORT" BILIUP_WEB_DIR="$WEB_DIST_DIR" BILIUP_DB_PATH="$DB_FILE" BILIUP_COOKIES_DIR="$COOKIES_DIR" BILIUP_RECORDINGS_DIR="$RECORDINGS_DIR" nohup "$SERVER_BIN" > server.log 2>&1 &
 SERVER_PID=$!
 echo "$SERVER_PID" > "$SERVER_PID_FILE"
 echo "Backend Server PID: $SERVER_PID"
@@ -239,19 +216,9 @@ fi
 
 echo -e "${GREEN}Server is UP and Ready!${NC}"
 
-# 5. 启动前端静态服务 + API 代理
-echo -e "${GREEN}Starting Frontend Server (static + /api proxy)...${NC}"
-nohup python3 "$WEB_PROXY_SCRIPT" --web-dir "$WEB_DIST_DIR" --web-port "$WEB_PORT" --api-host "127.0.0.1" --api-port "$API_PORT" > web.log 2>&1 &
-WEB_PID=$!
-echo "$WEB_PID" > "$WEB_PID_FILE"
-echo "Frontend Web PID: $WEB_PID"
-
 echo -e "${BLUE}=== Services Started (Detached) ===${NC}"
-echo "Web URL:     http://127.0.0.1:${WEB_PORT}"
-echo "Server API:  http://127.0.0.1:${API_PORT}"
+echo "Web/API URL: http://127.0.0.1:${API_PORT}"
 echo "Server PID:  ${SERVER_PID}"
-echo "Web PID:     ${WEB_PID}"
 echo "Server logs: tail -f server.log"
-echo "Web logs:    tail -f web.log"
 echo "Stop all:    ./stop.sh"
 exit 0

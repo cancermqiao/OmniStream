@@ -24,14 +24,26 @@ async fn main() -> Result<()> {
     tokio::spawn(monitor::run_monitor(state.clone()));
 
     let app = router::build_router(state);
+    let bind_addr = resolve_bind_addr();
 
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:3000")
+    let listener = tokio::net::TcpListener::bind(&bind_addr)
         .await
-        .context("failed to bind server to 0.0.0.0:3000")?;
+        .with_context(|| format!("failed to bind server to {bind_addr}"))?;
     match listener.local_addr() {
         Ok(addr) => tracing::info!("Server listening on {}", addr),
         Err(e) => tracing::warn!("Server started but local_addr lookup failed: {}", e),
     }
     axum::serve(listener, app).await.context("axum server exited with error")?;
     Ok(())
+}
+
+fn resolve_bind_addr() -> String {
+    if let Ok(addr) = std::env::var("BILIUP_BIND_ADDR")
+        && !addr.trim().is_empty()
+    {
+        return addr;
+    }
+
+    let port = std::env::var("API_PORT").unwrap_or_else(|_| "3000".to_string());
+    format!("0.0.0.0:{port}")
 }

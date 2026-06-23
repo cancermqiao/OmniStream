@@ -126,7 +126,6 @@ jobs:
           mkdir -p "release-assets/$bundle/bin" "release-assets/$bundle/web/public" "release-assets/$bundle/scripts"
           cp target/release/server "release-assets/$bundle/bin/server"
           cp -R target/dx/app/release/web/public/. "release-assets/$bundle/web/public/"
-          cp scripts/web_proxy_server.py "release-assets/$bundle/scripts/web_proxy_server.py"
           cp scripts/release-start.sh "release-assets/$bundle/scripts/release-start.sh"
           cp scripts/release-stop.sh "release-assets/$bundle/scripts/release-stop.sh"
           chmod +x "release-assets/$bundle/bin/server" "release-assets/$bundle/scripts/"*.sh

@@ -1,15 +1,20 @@
 FROM rust:1.93-bookworm AS builder
 WORKDIR /build
 
+RUN cargo install dioxus-cli --locked
+
 COPY Cargo.toml Cargo.lock ./
 COPY shared/Cargo.toml shared/Cargo.toml
 COPY server/Cargo.toml server/Cargo.toml
 COPY web/Cargo.toml web/Cargo.toml
+COPY web/Dioxus.toml web/Dioxus.toml
+COPY web/assets web/assets
 COPY shared/src shared/src
 COPY web/src web/src
 COPY server/src server/src
 
 RUN cargo build --release -p server --bin server
+RUN cd web && dx build --platform web --release
 
 FROM debian:bookworm-slim
 RUN apt-get update \
@@ -18,8 +23,10 @@ RUN apt-get update \
 
 WORKDIR /data
 COPY --from=builder /build/target/release/server /usr/local/bin/server
+COPY --from=builder /build/target/dx/app/release/web/public /opt/omnistream/web/public
 
 ENV BILIUP_DB_PATH=/data/omnistream.db
+ENV BILIUP_WEB_DIR=/opt/omnistream/web/public
 ENV RUST_LOG=info
 
 EXPOSE 3000

@@ -54,10 +54,13 @@ omnistream-linux-amd64/
 │   └── public/
 ├── scripts/
 │   ├── release-start.sh
-│   ├── release-stop.sh
-│   └── web_proxy_server.py
+│   └── release-stop.sh
 └── data/
 ```
+
+Release 整包只启动一个 Rust 后端进程。后端同时提供 `/api/*` 接口和 Dioxus Web 静态文件，`/api` 之外的路径会回退到 `index.html`，便于前端路由刷新。
+
+后端默认从 `web/public` 或 Dioxus release 目录查找静态文件；Release 脚本会显式设置 `BILIUP_WEB_DIR=/opt/omnistream/web/public`。
 
 ### PC 桌面端产物
 
@@ -81,7 +84,7 @@ Release 二进制不要求安装 Rust，但运行录制需要系统工具：
 
 ```bash
 sudo apt-get update
-sudo apt-get install -y ca-certificates curl ffmpeg python3 streamlink
+sudo apt-get install -y ca-certificates curl ffmpeg streamlink
 ```
 
 ### 2. 一键安装 Release
@@ -104,16 +107,16 @@ curl -fsSL https://raw.githubusercontent.com/OWNER/REPO/main/scripts/install-rel
 
 ```bash
 cd /opt/omnistream
-WEB_PORT=8080 API_PORT=3000 ./scripts/release-start.sh
+API_PORT=3000 ./scripts/release-start.sh
 ```
 
 启动后：
 
-- Web UI: `http://服务器IP:8080`
-- API: `http://服务器IP:3000`
+- Web UI: `http://服务器IP:3000`
+- API: `http://服务器IP:3000/api`
 - 数据库: `/opt/omnistream/data/omnistream.db`
 - 录制文件: `/opt/omnistream/data/recordings`
-- 日志: `/opt/omnistream/server.log`、`/opt/omnistream/web.log`
+- 日志: `/opt/omnistream/server.log`
 
 ### 4. 停止
 

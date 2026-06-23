@@ -6,7 +6,7 @@ cd "$ROOT_DIR"
 
 PID_DIR=".run"
 SERVER_PID_FILE="$PID_DIR/server.pid"
-WEB_PID_FILE="$PID_DIR/web.pid"
+LEGACY_WEB_PID_FILE="$PID_DIR/web.pid"
 
 stop_pid_file() {
   local name="$1"
@@ -32,5 +32,5 @@ stop_pid_file() {
   fi
 }
 
-stop_pid_file "OmniStream web" "$WEB_PID_FILE"
+stop_pid_file "OmniStream legacy web" "$LEGACY_WEB_PID_FILE"
 stop_pid_file "OmniStream server" "$SERVER_PID_FILE"
