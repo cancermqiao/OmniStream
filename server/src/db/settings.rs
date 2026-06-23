@@ -56,7 +56,6 @@ impl Db {
 #[cfg(test)]
 mod tests {
     use super::{Db, RECORDING_SETTINGS_KEY};
-    use sqlx::Executor;
     use std::path::PathBuf;
     use uuid::Uuid;
 
@@ -69,14 +68,10 @@ mod tests {
         let path = temp_db_path("malformed-settings");
         let db = Db::new(path.to_str().expect("db path")).await.expect("open db");
 
-        db.pool
-            .execute(
-                format!(
-                    "INSERT INTO app_settings (key, value) VALUES ('{}', '{{bad-json')",
-                    RECORDING_SETTINGS_KEY
-                )
-                .as_str(),
-            )
+        sqlx::query("INSERT INTO app_settings (key, value) VALUES (?, ?)")
+            .bind(RECORDING_SETTINGS_KEY)
+            .bind("{bad-json")
+            .execute(&db.pool)
             .await
             .expect("insert malformed settings");
 

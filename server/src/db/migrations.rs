@@ -140,7 +140,7 @@ async fn column_exists(
     column: &str,
 ) -> Result<bool, Box<dyn Error>> {
     let pragma = format!("PRAGMA table_info({table})");
-    let rows = sqlx::query(&pragma).fetch_all(&mut **tx).await?;
+    let rows = sqlx::query(sqlx::AssertSqlSafe(pragma)).fetch_all(&mut **tx).await?;
     Ok(rows.into_iter().any(|row| row.get::<String, _>("name") == column))
 }
 
@@ -169,7 +169,10 @@ mod tests {
 
     async fn column_names(pool: &Pool<Sqlite>, table: &str) -> Vec<String> {
         let pragma = format!("PRAGMA table_info({table})");
-        let rows = sqlx::query(&pragma).fetch_all(pool).await.expect("fetch table info");
+        let rows = sqlx::query(sqlx::AssertSqlSafe(pragma))
+            .fetch_all(pool)
+            .await
+            .expect("fetch table info");
         rows.into_iter().map(|row| row.get("name")).collect()
     }
 
