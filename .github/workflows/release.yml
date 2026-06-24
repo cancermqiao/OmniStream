@@ -123,9 +123,9 @@ jobs:
         run: |
           set -euo pipefail
           bundle="omnistream-${{ matrix.name }}"
-          mkdir -p "release-assets/$bundle/bin" "release-assets/$bundle/web/public" "release-assets/$bundle/scripts"
+          mkdir -p "release-assets/$bundle/bin/public" "release-assets/$bundle/scripts"
           cp target/release/server "release-assets/$bundle/bin/server"
-          cp -R target/dx/app/release/web/public/. "release-assets/$bundle/web/public/"
+          cp -R target/dx/app/release/web/public/. "release-assets/$bundle/bin/public/"
           cp scripts/release-start.sh "release-assets/$bundle/scripts/release-start.sh"
           cp scripts/release-stop.sh "release-assets/$bundle/scripts/release-stop.sh"
           chmod +x "release-assets/$bundle/bin/server" "release-assets/$bundle/scripts/"*.sh

@@ -29,7 +29,7 @@ pub fn UploadsPage(
                 || u.config.title.clone().unwrap_or_default().to_lowercase().contains(&keyword)
         })
         .collect();
-    rows.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    rows.sort_by_key(|a| a.name.to_lowercase());
     if !sort_asc() {
         rows.reverse();
     }

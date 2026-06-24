@@ -19,6 +19,8 @@ pub fn SettingsPage(
     let mut bilibili = use_signal(|| settings.quality.bilibili.clone());
     let mut douyu = use_signal(|| settings.quality.douyu.clone());
     let mut huya = use_signal(|| settings.quality.huya.clone());
+    let mut tiktok = use_signal(|| settings.quality.tiktok.clone());
+    let mut douyin = use_signal(|| settings.quality.douyin.clone());
     let mut twitch = use_signal(|| settings.quality.twitch.clone());
     let mut youtube = use_signal(|| settings.quality.youtube.clone());
     let mut default_quality = use_signal(|| settings.quality.default_quality.clone());
@@ -92,6 +94,8 @@ pub fn SettingsPage(
                     QualitySelect { label: "Bilibili 画质".to_string(), value: bilibili, on_change: move |v| bilibili.set(v) }
                     QualitySelect { label: "斗鱼 画质".to_string(), value: douyu, on_change: move |v| douyu.set(v) }
                     QualitySelect { label: "虎牙 画质".to_string(), value: huya, on_change: move |v| huya.set(v) }
+                    QualitySelect { label: "TikTok 画质".to_string(), value: tiktok, on_change: move |v| tiktok.set(v) }
+                    QualitySelect { label: "抖音 画质".to_string(), value: douyin, on_change: move |v| douyin.set(v) }
                     QualitySelect { label: "Twitch 画质".to_string(), value: twitch, on_change: move |v| twitch.set(v) }
                     QualitySelect { label: "YouTube 画质".to_string(), value: youtube, on_change: move |v| youtube.set(v) }
                     QualitySelect { label: "默认画质".to_string(), value: default_quality, on_change: move |v| default_quality.set(v) }
@@ -155,6 +159,8 @@ pub fn SettingsPage(
                                     bilibili: bilibili(),
                                     douyu: douyu(),
                                     huya: huya(),
+                                    tiktok: tiktok(),
+                                    douyin: douyin(),
                                     twitch: twitch(),
                                     youtube: youtube(),
                                     default_quality: default_quality(),

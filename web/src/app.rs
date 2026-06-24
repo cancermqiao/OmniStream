@@ -1,5 +1,4 @@
 use dioxus::prelude::*;
-use gloo_timers::future::TimeoutFuture;
 use shared::{DownloadConfig, UploadTemplate};
 use std::collections::HashSet;
 
@@ -8,6 +7,8 @@ use crate::components::{
     AccountsPage, DownloadModal, DownloadsPage, SettingsPage, TabItem, UploadModal, UploadsPage,
 };
 use crate::models::{AppData, QrStartResponse, Tab};
+#[cfg(target_arch = "wasm32")]
+use crate::sleep_ms;
 use crate::styles::theme_css;
 
 pub fn App() -> Element {
@@ -30,48 +31,51 @@ pub fn App() -> Element {
     let mut manual_upload_message = use_signal::<Option<String>>(|| None);
     let mut manual_upload_error = use_signal(|| false);
 
-    use_future(move || async move {
-        let mut account_tick = 0u8;
-        let mut settings_tick = 0u8;
-        loop {
-            let mut next = data();
+    #[cfg(target_arch = "wasm32")]
+    {
+        use_future(move || async move {
+            let mut account_tick = 0u8;
+            let mut settings_tick = 0u8;
+            loop {
+                let mut next = data();
 
-            if let Some(v) = api::fetch_downloads(api_url).await {
-                next.downloads = v;
-            }
-            if let Some(v) = api::fetch_uploads(api_url).await {
-                next.uploads = v;
-            }
-            if account_tick == 0
-                && let Some(v) = api::fetch_accounts(api_url).await
-            {
-                next.accounts = v;
-            }
-            account_tick = (account_tick + 1) % 10;
+                if let Some(v) = api::fetch_downloads(api_url).await {
+                    next.downloads = v;
+                }
+                if let Some(v) = api::fetch_uploads(api_url).await {
+                    next.uploads = v;
+                }
+                if account_tick == 0
+                    && let Some(v) = api::fetch_accounts(api_url).await
+                {
+                    next.accounts = v;
+                }
+                account_tick = (account_tick + 1) % 10;
 
-            if settings_tick == 0
-                && let Some(v) = api::fetch_recording_settings(api_url).await
-            {
-                next.recording_settings = v;
-            }
-            settings_tick = (settings_tick + 1) % 10;
+                if settings_tick == 0
+                    && let Some(v) = api::fetch_recording_settings(api_url).await
+                {
+                    next.recording_settings = v;
+                }
+                settings_tick = (settings_tick + 1) % 10;
 
-            data.set(next);
-            TimeoutFuture::new(2000).await;
-        }
-    });
-
-    use_effect(move || {
-        let Some(current_message) = operation_message() else {
-            return;
-        };
-        spawn(async move {
-            TimeoutFuture::new(5000).await;
-            if operation_message() == Some(current_message) {
-                operation_message.set(None);
+                data.set(next);
+                sleep_ms(2000).await;
             }
         });
-    });
+
+        use_effect(move || {
+            let Some(current_message) = operation_message() else {
+                return;
+            };
+            spawn(async move {
+                sleep_ms(5000).await;
+                if operation_message() == Some(current_message) {
+                    operation_message.set(None);
+                }
+            });
+        });
+    }
 
     let snapshot = data();
 

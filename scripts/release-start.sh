@@ -8,7 +8,6 @@ API_PORT="${API_PORT:-3000}"
 PID_DIR=".run"
 SERVER_PID_FILE="$PID_DIR/server.pid"
 SERVER_BIN="$ROOT_DIR/bin/server"
-WEB_DIST_DIR="$ROOT_DIR/web/public"
 DB_FILE="${BILIUP_DB_PATH:-$ROOT_DIR/data/omnistream.db}"
 COOKIES_DIR="${BILIUP_COOKIES_DIR:-$ROOT_DIR/data/cookies}"
 RECORDINGS_DIR="${BILIUP_RECORDINGS_DIR:-$ROOT_DIR/data/recordings}"
@@ -47,17 +46,11 @@ if [[ ! -x "$SERVER_BIN" ]]; then
   exit 1
 fi
 
-if [[ ! -f "$WEB_DIST_DIR/index.html" ]]; then
-  echo "web static files not found: $WEB_DIST_DIR"
-  exit 1
-fi
-
 ensure_not_running "OmniStream server" "$SERVER_PID_FILE"
 
-echo "Starting OmniStream server with embedded Web UI..."
+echo "Starting OmniStream server with Dioxus Fullstack SSR..."
 RUST_LOG="${RUST_LOG:-info}" \
 API_PORT="$API_PORT" \
-BILIUP_WEB_DIR="$WEB_DIST_DIR" \
 BILIUP_DB_PATH="$DB_FILE" \
 BILIUP_COOKIES_DIR="$COOKIES_DIR" \
 BILIUP_RECORDINGS_DIR="$RECORDINGS_DIR" \

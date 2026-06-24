@@ -7,19 +7,29 @@ license.workspace = true
 
 [features]
 default = ["web"]
-web = ["dioxus/web"]
-desktop = ["dioxus/desktop"]
-mobile = ["dioxus/mobile"]
+web = ["dioxus/web", "dioxus/fullstack", "dep:gloo-timers", "dep:web-sys"]
+server = [
+    "dioxus/fullstack",
+    "dioxus-fullstack/server",
+    "dep:dioxus-server",
+    "dep:async-trait",
+    "dep:tokio",
+]
+desktop = ["dioxus/desktop", "dioxus/fullstack", "dep:tokio"]
+mobile = ["dioxus/mobile", "dioxus/fullstack", "dep:tokio"]
 
 [dependencies]
 shared = { path = "../shared" }
 dioxus = "0.7.9"
-reqwest = { workspace = true }
+dioxus-fullstack = { version = "0.7.9", default-features = false, optional = true }
+dioxus-server = { version = "0.7.9", default-features = false, features = ["router"], optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-gloo-timers = { version = "0.4.0", features = ["futures"] }
+tokio = { workspace = true, optional = true }
+async-trait = { version = "0.1.89", optional = true }
+gloo-timers = { version = "0.4.0", features = ["futures"], optional = true }
 urlencoding = "2.1.3"
-web-sys = { version = "0.3.102", features = ["Window", "Location"] }
+web-sys = { version = "0.3.102", features = ["Window", "Location", "console"], optional = true }
 
 [lints]
 workspace = true

@@ -40,7 +40,7 @@ async fn prepare_segment_file(
 
 async fn stop_segment_process(child: &mut tokio::process::Child, task_id: &str, reason: &str) {
     if let Err(e) = child.kill().await {
-        tracing::warn!("Task {} failed to kill streamlink after {}: {}", task_id, reason, e);
+        tracing::warn!("Task {} failed to kill recorder after {}: {}", task_id, reason, e);
     }
 }
 
@@ -230,6 +230,12 @@ fn quality_for_url(url: &str, quality: &shared::PlatformQualityConfig) -> String
     if u.contains("huya.com") {
         return quality.huya.clone();
     }
+    if u.contains("tiktok.com") {
+        return quality.tiktok.clone();
+    }
+    if u.contains("douyin.com") {
+        return quality.douyin.clone();
+    }
     if u.contains("twitch.tv") {
         return quality.twitch.clone();
     }
@@ -264,4 +270,32 @@ fn sanitize_for_filename(raw: &str) -> String {
         .collect::<String>();
     out = out.trim_matches('_').to_string();
     if out.is_empty() { "task".to_string() } else { out }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::quality_for_url;
+    use shared::PlatformQualityConfig;
+
+    #[test]
+    fn quality_for_url_supports_requested_platforms() {
+        let quality = PlatformQualityConfig {
+            bilibili: "bili".to_string(),
+            douyu: "douyu".to_string(),
+            huya: "huya".to_string(),
+            tiktok: "tiktok".to_string(),
+            douyin: "douyin".to_string(),
+            twitch: "twitch".to_string(),
+            youtube: "youtube".to_string(),
+            default_quality: "default".to_string(),
+        };
+
+        assert_eq!(quality_for_url("https://www.douyu.com/74960", &quality), "douyu");
+        assert_eq!(
+            quality_for_url("https://www.tiktok.com/@diemhuynh_2003/live", &quality),
+            "tiktok"
+        );
+        assert_eq!(quality_for_url("https://live.douyin.com/393646574978", &quality), "douyin");
+        assert_eq!(quality_for_url("https://www.twitch.tv/seucreysonreborn", &quality), "twitch");
+    }
 }

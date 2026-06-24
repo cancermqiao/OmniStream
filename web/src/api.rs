@@ -1,372 +1,205 @@
-use crate::models::{
-    AccountDeleteRequest, AccountRenameRequest, QrConfirmRequest, QrStartResponse,
-};
-use shared::{DownloadConfig, RecordingSettings, UploadAccount, UploadTemplate};
+use dioxus::prelude::*;
+use shared::{DownloadConfig, QrStartResponse, RecordingSettings, UploadAccount, UploadTemplate};
 
-fn join_url(base: &str, path: &str) -> String {
-    format!("{}/{}", base.trim_end_matches('/'), path.trim_start_matches('/'))
+#[cfg(feature = "server")]
+use std::sync::{Arc, OnceLock};
+
+#[cfg(feature = "server")]
+#[async_trait::async_trait]
+pub trait BackendApi: Send + Sync {
+    async fn fetch_downloads(&self) -> Result<Vec<DownloadConfig>, String>;
+    async fn fetch_uploads(&self) -> Result<Vec<UploadTemplate>, String>;
+    async fn fetch_accounts(&self) -> Result<Vec<UploadAccount>, String>;
+    async fn save_download(&self, payload: DownloadConfig) -> Result<(), String>;
+    async fn delete_download(&self, id: String) -> Result<(), String>;
+    async fn clear_download_files(&self, id: String) -> Result<String, String>;
+    async fn stop_download(&self, id: String) -> Result<String, String>;
+    async fn resume_download(&self, id: String) -> Result<String, String>;
+    async fn save_upload(&self, payload: UploadTemplate) -> Result<(), String>;
+    async fn delete_upload(&self, id: String) -> Result<(), String>;
+    async fn start_qr_login(&self) -> Result<QrStartResponse, String>;
+    async fn confirm_qr_login(&self, session_id: String) -> Result<(), String>;
+    async fn rename_account(
+        &self,
+        account_file: String,
+        display_name: String,
+    ) -> Result<(), String>;
+    async fn delete_account(&self, account_file: String) -> Result<(), String>;
+    async fn fetch_recording_settings(&self) -> Result<RecordingSettings, String>;
+    async fn save_recording_settings(&self, settings: RecordingSettings) -> Result<(), String>;
+    async fn trigger_manual_upload(&self, id: String) -> Result<String, String>;
 }
 
-fn push_unique(bases: &mut Vec<String>, base: String) {
-    if !bases.iter().any(|b| b == &base) {
-        bases.push(base);
-    }
+#[cfg(feature = "server")]
+static BACKEND: OnceLock<Arc<dyn BackendApi>> = OnceLock::new();
+
+#[cfg(feature = "server")]
+pub fn install_backend(backend: Arc<dyn BackendApi>) {
+    let _ = BACKEND.set(backend);
 }
 
-fn api_bases(api_url: &str) -> Vec<String> {
-    let primary = api_url.trim_end_matches('/').to_string();
-    let mut bases = Vec::new();
-
-    #[cfg(target_arch = "wasm32")]
-    {
-        if let Some(window) = web_sys::window()
-            && let Ok(origin) = window.location().origin()
-        {
-            // Prefer same-origin /api when a reverse proxy is configured.
-            let same_origin = format!("{origin}/api");
-            push_unique(&mut bases, same_origin);
-
-            // Fallback for split-port deployment: web on :8080, api on :3000.
-            if let Ok(hostname) = window.location().hostname()
-                && !hostname.is_empty()
-                && let Ok(protocol) = window.location().protocol()
-            {
-                let proto = protocol.trim_end_matches(':');
-                let host_3000 = format!("{proto}://{hostname}:3000/api");
-                push_unique(&mut bases, host_3000);
-
-                // Avoid trying loopback first when page is opened from a public host.
-                let page_is_loopback = hostname == "127.0.0.1" || hostname == "localhost";
-                let primary_is_loopback =
-                    primary.contains("127.0.0.1") || primary.contains("localhost");
-                if !(primary_is_loopback && !page_is_loopback) {
-                    push_unique(&mut bases, primary.clone());
-                }
-            } else {
-                push_unique(&mut bases, primary.clone());
-            }
-        } else {
-            push_unique(&mut bases, primary.clone());
-        }
-    }
-
-    #[cfg(not(target_arch = "wasm32"))]
-    {
-        push_unique(&mut bases, primary.clone());
-    }
-
-    if bases.is_empty() {
-        push_unique(&mut bases, primary);
-    }
-
-    bases
+#[cfg(feature = "server")]
+fn backend() -> dioxus::prelude::ServerFnResult<&'static Arc<dyn BackendApi>> {
+    BACKEND.get().ok_or_else(|| dioxus::prelude::ServerFnError::new("backend is not installed"))
 }
 
-async fn response_error(endpoint: &str, resp: reqwest::Response) -> String {
-    let status = resp.status();
-    let body = resp.text().await.unwrap_or_default();
-    if body.trim().is_empty() {
-        format!("{endpoint} -> status {status}")
-    } else {
-        format!("{endpoint} -> status {status}, body: {body}")
-    }
+#[cfg(feature = "server")]
+fn server_error(err: impl ToString) -> dioxus::prelude::ServerFnError {
+    dioxus::prelude::ServerFnError::new(err.to_string())
 }
 
-pub async fn fetch_downloads(api_url: &str) -> Option<Vec<DownloadConfig>> {
-    for base in api_bases(api_url) {
-        let endpoint = join_url(&base, "/downloads");
-        if let Ok(resp) = reqwest::get(&endpoint).await {
-            if !resp.status().is_success() {
-                continue;
-            }
-            if let Ok(v) = resp.json().await {
-                return Some(v);
-            }
-        }
-    }
-    None
+#[server]
+async fn server_fetch_downloads() -> ServerFnResult<Vec<DownloadConfig>> {
+    backend().cloned()?.fetch_downloads().await.map_err(server_error)
 }
 
-pub async fn fetch_uploads(api_url: &str) -> Option<Vec<UploadTemplate>> {
-    for base in api_bases(api_url) {
-        let endpoint = join_url(&base, "/uploads");
-        if let Ok(resp) = reqwest::get(&endpoint).await {
-            if !resp.status().is_success() {
-                continue;
-            }
-            if let Ok(v) = resp.json().await {
-                return Some(v);
-            }
-        }
-    }
-    None
+#[server]
+async fn server_fetch_uploads() -> ServerFnResult<Vec<UploadTemplate>> {
+    backend().cloned()?.fetch_uploads().await.map_err(server_error)
 }
 
-pub async fn fetch_accounts(api_url: &str) -> Option<Vec<UploadAccount>> {
-    for base in api_bases(api_url) {
-        let endpoint = join_url(&base, "/accounts");
-        if let Ok(resp) = reqwest::get(&endpoint).await {
-            if !resp.status().is_success() {
-                continue;
-            }
-            if let Ok(v) = resp.json().await {
-                return Some(v);
-            }
-        }
-    }
-    None
+#[server]
+async fn server_fetch_accounts() -> ServerFnResult<Vec<UploadAccount>> {
+    backend().cloned()?.fetch_accounts().await.map_err(server_error)
 }
 
-pub async fn save_download(api_url: &str, payload: &DownloadConfig) -> Result<(), String> {
-    let mut last_err = "request not sent".to_string();
-    for base in api_bases(api_url) {
-        let endpoint = join_url(&base, "/downloads");
-        match reqwest::Client::new().post(&endpoint).json(payload).send().await {
-            Ok(resp) => {
-                if resp.status().is_success() {
-                    return Ok(());
-                }
-                last_err = response_error(&endpoint, resp).await;
-            }
-            Err(e) => last_err = format!("{endpoint} -> {e}"),
-        }
-    }
-    Err(last_err)
+#[server]
+async fn server_save_download(payload: DownloadConfig) -> ServerFnResult<()> {
+    backend().cloned()?.save_download(payload).await.map_err(server_error)
 }
 
-pub async fn delete_download(api_url: &str, id: &str) -> Result<(), String> {
-    let mut last_err = "request not sent".to_string();
-    for base in api_bases(api_url) {
-        let endpoint = join_url(&base, &format!("/downloads/{id}"));
-        match reqwest::Client::new().delete(&endpoint).send().await {
-            Ok(resp) => {
-                if resp.status().is_success() {
-                    return Ok(());
-                }
-                last_err = response_error(&endpoint, resp).await;
-            }
-            Err(e) => last_err = format!("{endpoint} -> {e}"),
-        }
-    }
-    Err(last_err)
+#[server]
+async fn server_delete_download(id: String) -> ServerFnResult<()> {
+    backend().cloned()?.delete_download(id).await.map_err(server_error)
 }
 
-pub async fn clear_download_files(api_url: &str, id: &str) -> Result<String, String> {
-    let mut last_err = "request not sent".to_string();
-    for base in api_bases(api_url) {
-        let endpoint = join_url(&base, &format!("/downloads/{id}/files"));
-        match reqwest::Client::new().delete(&endpoint).send().await {
-            Ok(resp) => {
-                if resp.status().is_success() {
-                    let body = resp.text().await.unwrap_or_default();
-                    return Ok(body);
-                }
-                last_err = response_error(&endpoint, resp).await;
-            }
-            Err(e) => last_err = format!("{endpoint} -> {e}"),
-        }
-    }
-    Err(last_err)
+#[server]
+async fn server_clear_download_files(id: String) -> ServerFnResult<String> {
+    backend().cloned()?.clear_download_files(id).await.map_err(server_error)
 }
 
-pub async fn stop_download(api_url: &str, id: &str) -> Result<String, String> {
-    post_download_action(api_url, id, "stop").await
+#[server]
+async fn server_stop_download(id: String) -> ServerFnResult<String> {
+    backend().cloned()?.stop_download(id).await.map_err(server_error)
 }
 
-pub async fn resume_download(api_url: &str, id: &str) -> Result<String, String> {
-    post_download_action(api_url, id, "resume").await
+#[server]
+async fn server_resume_download(id: String) -> ServerFnResult<String> {
+    backend().cloned()?.resume_download(id).await.map_err(server_error)
 }
 
-async fn post_download_action(api_url: &str, id: &str, action: &str) -> Result<String, String> {
-    let mut last_err = "request not sent".to_string();
-    for base in api_bases(api_url) {
-        let endpoint = join_url(&base, &format!("/downloads/{id}/{action}"));
-        match reqwest::Client::new().post(&endpoint).send().await {
-            Ok(resp) => {
-                if resp.status().is_success() {
-                    let body = resp.text().await.unwrap_or_default();
-                    return Ok(body);
-                }
-                last_err = response_error(&endpoint, resp).await;
-            }
-            Err(e) => last_err = format!("{endpoint} -> {e}"),
-        }
-    }
-    Err(last_err)
+#[server]
+async fn server_save_upload(payload: UploadTemplate) -> ServerFnResult<()> {
+    backend().cloned()?.save_upload(payload).await.map_err(server_error)
 }
 
-pub async fn save_upload(api_url: &str, payload: &UploadTemplate) -> Result<(), String> {
-    let mut last_err = "request not sent".to_string();
-    for base in api_bases(api_url) {
-        let endpoint = join_url(&base, "/uploads");
-        match reqwest::Client::new().post(&endpoint).json(payload).send().await {
-            Ok(resp) => {
-                if resp.status().is_success() {
-                    return Ok(());
-                }
-                last_err = response_error(&endpoint, resp).await;
-            }
-            Err(e) => last_err = format!("{endpoint} -> {e}"),
-        }
-    }
-    Err(last_err)
+#[server]
+async fn server_delete_upload(id: String) -> ServerFnResult<()> {
+    backend().cloned()?.delete_upload(id).await.map_err(server_error)
 }
 
-pub async fn delete_upload(api_url: &str, id: &str) -> Result<(), String> {
-    let mut last_err = "request not sent".to_string();
-    for base in api_bases(api_url) {
-        let endpoint = join_url(&base, &format!("/uploads/{id}"));
-        match reqwest::Client::new().delete(&endpoint).send().await {
-            Ok(resp) => {
-                if resp.status().is_success() {
-                    return Ok(());
-                }
-                last_err = response_error(&endpoint, resp).await;
-            }
-            Err(e) => last_err = format!("{endpoint} -> {e}"),
-        }
-    }
-    Err(last_err)
+#[server]
+async fn server_start_qr_login() -> ServerFnResult<QrStartResponse> {
+    backend().cloned()?.start_qr_login().await.map_err(server_error)
 }
 
-pub async fn start_qr_login(api_url: &str) -> Result<QrStartResponse, String> {
-    let mut last_err = "request not sent".to_string();
-
-    for base in api_bases(api_url) {
-        let endpoint = join_url(&base, "/accounts/qrcode/start");
-        match reqwest::Client::new().post(&endpoint).send().await {
-            Ok(resp) => {
-                if !resp.status().is_success() {
-                    last_err = format!("{endpoint} -> status {}", resp.status());
-                    continue;
-                }
-                return resp
-                    .json::<QrStartResponse>()
-                    .await
-                    .map_err(|e| format!("{endpoint} -> decode error: {e}"));
-            }
-            Err(e) => {
-                last_err = format!("{endpoint} -> {e}");
-            }
-        }
-    }
-
-    Err(last_err)
+#[server]
+async fn server_confirm_qr_login(session_id: String) -> ServerFnResult<()> {
+    backend().cloned()?.confirm_qr_login(session_id).await.map_err(server_error)
 }
 
-pub async fn confirm_qr_login(api_url: &str, session_id: String) -> Result<(), String> {
-    let mut last_err = "request not sent".to_string();
-
-    for base in api_bases(api_url) {
-        let endpoint = join_url(&base, "/accounts/qrcode/confirm");
-        match reqwest::Client::new()
-            .post(&endpoint)
-            .json(&QrConfirmRequest { session_id: session_id.clone() })
-            .send()
-            .await
-        {
-            Ok(resp) => {
-                if resp.status().is_success() {
-                    return Ok(());
-                }
-                last_err = format!("{endpoint} -> status {}", resp.status());
-            }
-            Err(e) => {
-                last_err = format!("{endpoint} -> {e}");
-            }
-        }
-    }
-
-    Err(last_err)
+#[server]
+async fn server_rename_account(account_file: String, display_name: String) -> ServerFnResult<()> {
+    backend().cloned()?.rename_account(account_file, display_name).await.map_err(server_error)
 }
 
-pub async fn rename_account(api_url: &str, account_file: String, display_name: String) {
-    for base in api_bases(api_url) {
-        if let Ok(resp) = reqwest::Client::new()
-            .post(join_url(&base, "/accounts/rename"))
-            .json(&AccountRenameRequest {
-                account_file: account_file.clone(),
-                display_name: display_name.clone(),
-            })
-            .send()
-            .await
-            && resp.status().is_success()
-        {
-            break;
-        }
-    }
+#[server]
+async fn server_delete_account(account_file: String) -> ServerFnResult<()> {
+    backend().cloned()?.delete_account(account_file).await.map_err(server_error)
 }
 
-pub async fn delete_account(api_url: &str, account_file: String) {
-    for base in api_bases(api_url) {
-        if let Ok(resp) = reqwest::Client::new()
-            .post(join_url(&base, "/accounts/delete"))
-            .json(&AccountDeleteRequest { account_file: account_file.clone() })
-            .send()
-            .await
-            && resp.status().is_success()
-        {
-            break;
-        }
-    }
+#[server]
+async fn server_fetch_recording_settings() -> ServerFnResult<RecordingSettings> {
+    backend().cloned()?.fetch_recording_settings().await.map_err(server_error)
 }
 
-pub async fn fetch_recording_settings(api_url: &str) -> Option<RecordingSettings> {
-    for base in api_bases(api_url) {
-        let endpoint = join_url(&base, "/settings/recording");
-        if let Ok(resp) = reqwest::get(&endpoint).await {
-            if !resp.status().is_success() {
-                continue;
-            }
-            if let Ok(v) = resp.json().await {
-                return Some(v);
-            }
-        }
-    }
-    None
+#[server]
+async fn server_save_recording_settings(settings: RecordingSettings) -> ServerFnResult<()> {
+    backend().cloned()?.save_recording_settings(settings).await.map_err(server_error)
+}
+
+#[server]
+async fn server_trigger_manual_upload(id: String) -> ServerFnResult<String> {
+    backend().cloned()?.trigger_manual_upload(id).await.map_err(server_error)
+}
+
+pub async fn fetch_downloads(_api_url: &str) -> Option<Vec<DownloadConfig>> {
+    server_fetch_downloads().await.ok()
+}
+
+pub async fn fetch_uploads(_api_url: &str) -> Option<Vec<UploadTemplate>> {
+    server_fetch_uploads().await.ok()
+}
+
+pub async fn fetch_accounts(_api_url: &str) -> Option<Vec<UploadAccount>> {
+    server_fetch_accounts().await.ok()
+}
+
+pub async fn save_download(_api_url: &str, payload: &DownloadConfig) -> Result<(), String> {
+    server_save_download(payload.clone()).await.map_err(|e| e.to_string())
+}
+
+pub async fn delete_download(_api_url: &str, id: &str) -> Result<(), String> {
+    server_delete_download(id.to_string()).await.map_err(|e| e.to_string())
+}
+
+pub async fn clear_download_files(_api_url: &str, id: &str) -> Result<String, String> {
+    server_clear_download_files(id.to_string()).await.map_err(|e| e.to_string())
+}
+
+pub async fn stop_download(_api_url: &str, id: &str) -> Result<String, String> {
+    server_stop_download(id.to_string()).await.map_err(|e| e.to_string())
+}
+
+pub async fn resume_download(_api_url: &str, id: &str) -> Result<String, String> {
+    server_resume_download(id.to_string()).await.map_err(|e| e.to_string())
+}
+
+pub async fn save_upload(_api_url: &str, payload: &UploadTemplate) -> Result<(), String> {
+    server_save_upload(payload.clone()).await.map_err(|e| e.to_string())
+}
+
+pub async fn delete_upload(_api_url: &str, id: &str) -> Result<(), String> {
+    server_delete_upload(id.to_string()).await.map_err(|e| e.to_string())
+}
+
+pub async fn start_qr_login(_api_url: &str) -> Result<QrStartResponse, String> {
+    server_start_qr_login().await.map_err(|e| e.to_string())
+}
+
+pub async fn confirm_qr_login(_api_url: &str, session_id: String) -> Result<(), String> {
+    server_confirm_qr_login(session_id).await.map_err(|e| e.to_string())
+}
+
+pub async fn rename_account(_api_url: &str, account_file: String, display_name: String) {
+    let _ = server_rename_account(account_file, display_name).await;
+}
+
+pub async fn delete_account(_api_url: &str, account_file: String) {
+    let _ = server_delete_account(account_file).await;
+}
+
+pub async fn fetch_recording_settings(_api_url: &str) -> Option<RecordingSettings> {
+    server_fetch_recording_settings().await.ok()
 }
 
 pub async fn save_recording_settings(
-    api_url: &str,
+    _api_url: &str,
     settings: &RecordingSettings,
 ) -> Result<(), String> {
-    let mut last_err = "request not sent".to_string();
-    for base in api_bases(api_url) {
-        let endpoint = join_url(&base, "/settings/recording");
-        match reqwest::Client::new().post(&endpoint).json(settings).send().await {
-            Ok(resp) => {
-                if resp.status().is_success() {
-                    return Ok(());
-                }
-                last_err = response_error(&endpoint, resp).await;
-            }
-            Err(e) => last_err = format!("{endpoint} -> {e}"),
-        }
-    }
-    Err(last_err)
+    server_save_recording_settings(settings.clone()).await.map_err(|e| e.to_string())
 }
 
-pub async fn trigger_manual_upload(api_url: &str, id: &str) -> Result<String, String> {
-    let mut last_err = "request not sent".to_string();
-
-    for base in api_bases(api_url) {
-        let endpoint = join_url(&base, &format!("/downloads/{id}/upload"));
-        match reqwest::Client::new().post(&endpoint).send().await {
-            Ok(resp) => {
-                if resp.status().is_success() {
-                    let body = resp.text().await.unwrap_or_default();
-                    if body.trim().is_empty() {
-                        return Ok("manual upload started".to_string());
-                    }
-                    return Ok(body);
-                }
-                last_err = response_error(&endpoint, resp).await;
-            }
-            Err(e) => {
-                last_err = format!("{endpoint} -> {e}");
-            }
-        }
-    }
-
-    Err(last_err)
+pub async fn trigger_manual_upload(_api_url: &str, id: &str) -> Result<String, String> {
+    server_trigger_manual_upload(id.to_string()).await.map_err(|e| e.to_string())
 }

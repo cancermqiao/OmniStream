@@ -7,33 +7,47 @@ const MAX_SEGMENT_SIZE_MB: u64 = 102_400;
 const MAX_SEGMENT_TIME_SEC: u64 = 86_400;
 
 pub async fn get_recording_settings(State(state): State<SharedState>) -> Json<RecordingSettings> {
-    Json(state.recording_settings.read().await.clone())
+    Json(get_recording_settings_service(&state).await)
+}
+
+pub async fn get_recording_settings_service(state: &SharedState) -> RecordingSettings {
+    state.recording_settings.read().await.clone()
 }
 
 pub async fn set_recording_settings(
     State(state): State<SharedState>,
     Json(payload): Json<RecordingSettings>,
 ) -> (StatusCode, String) {
+    match set_recording_settings_service(&state, payload).await {
+        Ok(()) => (StatusCode::OK, String::new()),
+        Err(response) => response,
+    }
+}
+
+pub async fn set_recording_settings_service(
+    state: &SharedState,
+    payload: RecordingSettings,
+) -> Result<(), (StatusCode, String)> {
     let settings = match sanitize_recording_settings(payload) {
         Ok(settings) => settings,
         Err(message) => {
             tracing::warn!("Rejected recording settings update: {}", message);
-            return (StatusCode::BAD_REQUEST, message);
+            return Err((StatusCode::BAD_REQUEST, message));
         }
     };
 
     if let Err(e) = state.db.save_recording_settings(&settings).await {
         tracing::error!("Failed to save recording settings: {}", e);
-        return (
+        return Err((
             StatusCode::INTERNAL_SERVER_ERROR,
             "failed to save recording settings".to_string(),
-        );
+        ));
     }
     {
         let mut lock = state.recording_settings.write().await;
         *lock = settings;
     }
-    (StatusCode::OK, String::new())
+    Ok(())
 }
 
 pub(crate) fn sanitize_recording_settings(
@@ -49,6 +63,8 @@ pub(crate) fn sanitize_recording_settings(
     normalize_quality(&mut settings.quality.bilibili);
     normalize_quality(&mut settings.quality.douyu);
     normalize_quality(&mut settings.quality.huya);
+    normalize_quality(&mut settings.quality.tiktok);
+    normalize_quality(&mut settings.quality.douyin);
     normalize_quality(&mut settings.quality.twitch);
     normalize_quality(&mut settings.quality.youtube);
     normalize_quality(&mut settings.quality.default_quality);

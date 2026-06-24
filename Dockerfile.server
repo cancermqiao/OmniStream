@@ -4,6 +4,7 @@ WORKDIR /build
 RUN cargo install dioxus-cli --locked
 
 COPY Cargo.toml Cargo.lock ./
+COPY patches patches
 COPY shared/Cargo.toml shared/Cargo.toml
 COPY server/Cargo.toml server/Cargo.toml
 COPY web/Cargo.toml web/Cargo.toml
@@ -23,10 +24,9 @@ RUN apt-get update \
 
 WORKDIR /data
 COPY --from=builder /build/target/release/server /usr/local/bin/server
-COPY --from=builder /build/target/dx/app/release/web/public /opt/omnistream/web/public
+COPY --from=builder /build/target/dx/app/release/web/public /usr/local/bin/public
 
 ENV BILIUP_DB_PATH=/data/omnistream.db
-ENV BILIUP_WEB_DIR=/opt/omnistream/web/public
 ENV RUST_LOG=info
 
 EXPOSE 3000

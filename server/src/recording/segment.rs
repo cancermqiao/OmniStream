@@ -4,7 +4,9 @@ use tokio::process::Command;
 use tokio::time::{Instant, MissedTickBehavior, interval, sleep};
 
 use super::{RecorderRuntimeConfig, prepare_segment_file, resolve_task_name, stop_segment_process};
-use crate::{checker::STREAMLINK_PATH, state::SharedState};
+use crate::{checker::STREAMLINK_PATH, platform::resolve_stream, state::SharedState};
+
+const FFMPEG_PATH: &str = "ffmpeg";
 
 pub(super) enum SegmentLoopAction {
     Continue,
@@ -44,14 +46,46 @@ pub(super) async fn record_segment(
 
     tracing::info!("Task {} starting segment: {}", task_id, current_filename);
 
-    let mut command = Command::new(STREAMLINK_PATH);
-    command.arg("-o").arg(&current_filename).arg(url).arg(&runtime.quality);
-    command.kill_on_drop(true);
+    let recorder = match resolve_stream(url, &runtime.quality).await {
+        Ok(Some(stream)) => {
+            tracing::info!(
+                "Task {} resolved platform stream: original={}, resolved={}",
+                task_id,
+                url,
+                stream.input_url
+            );
+            if stream.direct_input {
+                RecorderCommand::Ffmpeg { input_url: stream.input_url }
+            } else {
+                RecorderCommand::Streamlink {
+                    input_url: stream.input_url,
+                    quality: "best".to_string(),
+                }
+            }
+        }
+        Ok(None) => RecorderCommand::Streamlink {
+            input_url: url.to_string(),
+            quality: runtime.quality.clone(),
+        },
+        Err(e) => {
+            tracing::warn!(
+                "Task {} failed to resolve platform stream, falling back to original URL: {}",
+                task_id,
+                e
+            );
+            RecorderCommand::Streamlink {
+                input_url: url.to_string(),
+                quality: runtime.quality.clone(),
+            }
+        }
+    };
+
+    let (mut command, recorder_name) = build_recorder_command(&recorder, &current_filename);
 
     let mut child = match command.spawn() {
         Ok(child) => child,
         Err(e) => {
-            let message = format!("Failed to spawn streamlink: {}", e);
+            let message = format!("Failed to spawn {recorder_name}: {e}");
             tracing::error!("Task {} {}", task_id, message);
             return SegmentRecordResult {
                 filename: current_filename,
@@ -70,8 +104,8 @@ pub(super) async fn record_segment(
         tokio::select! {
             status = child.wait() => {
                 match status {
-                    Ok(s) => tracing::info!("Task {} segment finished with status: {}", task_id, s),
-                    Err(e) => tracing::error!("Task {} segment error: {}", task_id, e),
+                    Ok(s) => tracing::info!("Task {} {} segment finished with status: {}", task_id, recorder_name, s),
+                    Err(e) => tracing::error!("Task {} {} segment error: {}", task_id, recorder_name, e),
                 }
                 break;
             }
@@ -104,6 +138,49 @@ pub(super) async fn record_segment(
     }
 
     SegmentRecordResult { filename: current_filename, limit_reached, terminal_error: None }
+}
+
+enum RecorderCommand {
+    Streamlink { input_url: String, quality: String },
+    Ffmpeg { input_url: String },
+}
+
+fn build_recorder_command(recorder: &RecorderCommand, output: &str) -> (Command, &'static str) {
+    match recorder {
+        RecorderCommand::Streamlink { input_url, quality } => {
+            let mut command = Command::new(STREAMLINK_PATH);
+            command.arg("-o").arg(output).arg(input_url).arg(quality);
+            command.kill_on_drop(true);
+            (command, STREAMLINK_PATH)
+        }
+        RecorderCommand::Ffmpeg { input_url } => {
+            let mut command = Command::new(FFMPEG_PATH);
+            command
+                .arg("-hide_banner")
+                .arg("-loglevel")
+                .arg("warning")
+                .arg("-y")
+                .arg("-reconnect")
+                .arg("1")
+                .arg("-reconnect_streamed")
+                .arg("1")
+                .arg("-reconnect_delay_max")
+                .arg("5")
+                .arg("-i")
+                .arg(input_url)
+                .arg("-c")
+                .arg("copy")
+                .arg("-bsf:a")
+                .arg("aac_adtstoasc")
+                .arg("-movflags")
+                .arg("frag_keyframe+empty_moov")
+                .arg("-f")
+                .arg("mp4")
+                .arg(output);
+            command.kill_on_drop(true);
+            (command, FFMPEG_PATH)
+        }
+    }
 }
 
 pub(super) fn update_recorded_files(

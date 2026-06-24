@@ -36,7 +36,7 @@ if [[ -f data/omnistream.db ]]; then
   echo "backup created: $BACKUP_DIR/omnistream.db.$timestamp.bak"
 fi
 
-export IMAGE_TAG REGISTRY API_PORT WEB_PORT RUST_LOG
+export IMAGE_TAG REGISTRY API_PORT RUST_LOG
 
 echo "deploying tag: $IMAGE_TAG"
 docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" pull || true
@@ -55,8 +55,7 @@ done
 if [[ "$ok" -eq 1 ]]; then
   echo "$IMAGE_TAG" > "$STATE_FILE"
   echo "deploy success: $IMAGE_TAG"
-  echo "web:  http://127.0.0.1:${WEB_PORT:-8080}"
-  echo "api:  http://127.0.0.1:${API_PORT:-3000}"
+  echo "web/api: http://127.0.0.1:${API_PORT:-3000}"
   exit 0
 fi
 

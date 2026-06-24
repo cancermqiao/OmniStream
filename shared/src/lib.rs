@@ -125,6 +125,28 @@ pub struct UploadAccount {
     pub error: Option<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct QrStartResponse {
+    pub session_id: String,
+    pub qr_url: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct QrConfirmRequest {
+    pub session_id: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct AccountRenameRequest {
+    pub account_file: String,
+    pub display_name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct AccountDeleteRequest {
+    pub account_file: String,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct BiliupConfig {
     // 录制分段大小（字节），0 或 None 表示不分段
@@ -140,9 +162,17 @@ pub struct PlatformQualityConfig {
     pub bilibili: String,
     pub douyu: String,
     pub huya: String,
+    #[serde(default = "default_quality")]
+    pub tiktok: String,
+    #[serde(default = "default_quality")]
+    pub douyin: String,
     pub twitch: String,
     pub youtube: String,
     pub default_quality: String,
+}
+
+fn default_quality() -> String {
+    "best".to_string()
 }
 
 impl Default for PlatformQualityConfig {
@@ -151,6 +181,8 @@ impl Default for PlatformQualityConfig {
             bilibili: "best".to_string(),
             douyu: "best".to_string(),
             huya: "best".to_string(),
+            tiktok: "best".to_string(),
+            douyin: "best".to_string(),
             twitch: "best".to_string(),
             youtube: "best".to_string(),
             default_quality: "best".to_string(),

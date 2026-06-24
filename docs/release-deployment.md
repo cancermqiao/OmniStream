@@ -6,7 +6,7 @@
 
 - 每次 push / PR 自动执行质量门禁，尽早发现格式、测试、Clippy、WASM 前端构建问题。
 - 每次推送 `v*` tag 自动生成 GitHub Release。
-- Release 附带 Web 静态包、Linux 服务端整包、PC 桌面端包。
+- Release 附带 Dioxus Web 客户端资源包、Linux Fullstack 服务端整包、PC 桌面端包。
 - 腾讯云服务器可以不安装 Rust，不拉源码，直接下载 Release 二进制整包运行。
 - Docker 镜像发布继续保留，适合已有 Docker Compose 部署的环境。
 
@@ -29,7 +29,7 @@
 `.github/workflows/release.yml` 在推送 `v*` tag 或手动触发时运行：
 
 - `quality-gate`：Release 前再次执行格式、测试、Clippy 和 WASM 检查。
-- `web-static`：构建 `dx build --platform web --release`，产出 `omnistream-web-static.tar.gz`。
+- `web-static`：构建 Dioxus Web 客户端资源，供 Fullstack 服务端整包使用。
 - `linux-package`：产出 `omnistream-linux-amd64.tar.gz` 和 `omnistream-linux-arm64.tar.gz`。
 - `desktop-package`：产出 Linux、macOS、Windows 桌面端二进制包。
 - `android-package`：手动触发且勾选 `build_android` 时，尝试产出未签名 Android 包。
@@ -49,8 +49,7 @@
 ```text
 omnistream-linux-amd64/
 ├── bin/
-│   └── server
-├── web/
+│   ├── server
 │   └── public/
 ├── scripts/
 │   ├── release-start.sh
@@ -58,9 +57,9 @@ omnistream-linux-amd64/
 └── data/
 ```
 
-Release 整包只启动一个 Rust 后端进程。后端同时提供 `/api/*` 接口和 Dioxus Web 静态文件，`/api` 之外的路径会回退到 `index.html`，便于前端路由刷新。
+Release 整包只启动一个 Rust 后端进程。后端通过 Dioxus Fullstack 提供 SSR、客户端资源和 Server Functions；保留的 `/api/*` REST 路由仅用于兼容旧调用。
 
-后端默认从 `web/public` 或 Dioxus release 目录查找静态文件；Release 脚本会显式设置 `BILIUP_WEB_DIR=/opt/omnistream/web/public`。
+Dioxus 默认从服务端二进制同级的 `public/` 目录加载客户端资源，因此 Release 包把资源放在 `bin/public/`，启动脚本不再需要额外配置 Web 静态目录。
 
 ### PC 桌面端产物
 
@@ -113,7 +112,8 @@ API_PORT=3000 ./scripts/release-start.sh
 启动后：
 
 - Web UI: `http://服务器IP:3000`
-- API: `http://服务器IP:3000/api`
+- Server Functions: 由 Dioxus 自动生成并挂载在同一服务进程内。
+- Legacy API: `http://服务器IP:3000/api`
 - 数据库: `/opt/omnistream/data/omnistream.db`
 - 录制文件: `/opt/omnistream/data/recordings`
 - 日志: `/opt/omnistream/server.log`
@@ -143,7 +143,6 @@ cd /opt/omnistream
 如果服务器使用 Docker，可以继续使用 `release-images.yml` 发布到 GHCR 的镜像：
 
 - `ghcr.io/<owner>/omnistream-server:<tag>`
-- `ghcr.io/<owner>/omnistream-web:<tag>`
 
 部署方式：
 

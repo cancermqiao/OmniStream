@@ -51,7 +51,7 @@ jobs:
             echo "tag=sha-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Build and push server image
+      - name: Build and push fullstack image
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -61,14 +61,3 @@ jobs:
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/omnistream-server:${{ steps.vars.outputs.tag }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/omnistream-server:latest
-
-      - name: Build and push web image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: Dockerfile.web
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/omnistream-web:${{ steps.vars.outputs.tag }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/omnistream-web:latest

@@ -7,6 +7,7 @@ mod db;
 mod downloads;
 mod downloads_service;
 mod monitor;
+mod platform;
 mod recording;
 mod router;
 mod settings;

@@ -29,6 +29,8 @@ pub fn DownloadModal(
     let mut q_bilibili = use_signal(|| base_settings.quality.bilibili.clone());
     let mut q_douyu = use_signal(|| base_settings.quality.douyu.clone());
     let mut q_huya = use_signal(|| base_settings.quality.huya.clone());
+    let mut q_tiktok = use_signal(|| base_settings.quality.tiktok.clone());
+    let mut q_douyin = use_signal(|| base_settings.quality.douyin.clone());
     let mut q_twitch = use_signal(|| base_settings.quality.twitch.clone());
     let mut q_youtube = use_signal(|| base_settings.quality.youtube.clone());
     let mut q_default = use_signal(|| base_settings.quality.default_quality.clone());
@@ -102,6 +104,8 @@ pub fn DownloadModal(
                         QualitySelect { label: "Bilibili 画质".to_string(), value: q_bilibili, on_change: move |v| q_bilibili.set(v) }
                         QualitySelect { label: "斗鱼 画质".to_string(), value: q_douyu, on_change: move |v| q_douyu.set(v) }
                         QualitySelect { label: "虎牙 画质".to_string(), value: q_huya, on_change: move |v| q_huya.set(v) }
+                        QualitySelect { label: "TikTok 画质".to_string(), value: q_tiktok, on_change: move |v| q_tiktok.set(v) }
+                        QualitySelect { label: "抖音 画质".to_string(), value: q_douyin, on_change: move |v| q_douyin.set(v) }
                         QualitySelect { label: "Twitch 画质".to_string(), value: q_twitch, on_change: move |v| q_twitch.set(v) }
                         QualitySelect { label: "YouTube 画质".to_string(), value: q_youtube, on_change: move |v| q_youtube.set(v) }
                         QualitySelect { label: "默认画质".to_string(), value: q_default, on_change: move |v| q_default.set(v) }
@@ -158,6 +162,8 @@ pub fn DownloadModal(
                                     bilibili: q_bilibili(),
                                     douyu: q_douyu(),
                                     huya: q_huya(),
+                                    tiktok: q_tiktok(),
+                                    douyin: q_douyin(),
                                     twitch: q_twitch(),
                                     youtube: q_youtube(),
                                     default_quality: q_default(),
@@ -369,7 +375,6 @@ pub fn UploadModal(
                                     description: description(),
                                     dynamic: dynamic(),
                                     account_file: selected_account,
-                                    ..Default::default()
                                 },
                             });
                         },

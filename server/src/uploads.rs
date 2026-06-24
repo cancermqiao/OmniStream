@@ -17,12 +17,21 @@ const MAX_UPLOAD_TAG_CHARS: usize = 20;
 pub async fn list_uploads(
     State(state): State<SharedState>,
 ) -> (StatusCode, Json<Vec<UploadTemplate>>) {
-    match state.db.get_uploads().await {
+    match list_uploads_service(&state).await {
         Ok(uploads) => (StatusCode::OK, Json(uploads)),
-        Err(e) => {
-            tracing::error!("Failed to list uploads: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(vec![]))
+        Err((status, message)) => {
+            tracing::error!("Failed to list uploads: {}", message);
+            (status, Json(vec![]))
         }
+    }
+}
+
+pub async fn list_uploads_service(
+    state: &SharedState,
+) -> Result<Vec<UploadTemplate>, (StatusCode, String)> {
+    match state.db.get_uploads().await {
+        Ok(uploads) => Ok(uploads),
+        Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, e.to_string())),
     }
 }
 
@@ -30,6 +39,16 @@ pub async fn add_upload(
     State(state): State<SharedState>,
     Json(payload): Json<UploadTemplate>,
 ) -> (StatusCode, String) {
+    match save_upload_service(&state, payload).await {
+        Ok(()) => (StatusCode::OK, String::new()),
+        Err(response) => response,
+    }
+}
+
+pub async fn save_upload_service(
+    state: &SharedState,
+    payload: UploadTemplate,
+) -> Result<(), (StatusCode, String)> {
     let mut template = payload;
     if template.id.is_empty() {
         template.id = Uuid::new_v4().to_string();
@@ -38,14 +57,17 @@ pub async fn add_upload(
 
     if let Err(message) = validate_upload_template(&template).await {
         tracing::warn!("Rejected upload template update: {}", message);
-        return (StatusCode::BAD_REQUEST, message);
+        return Err((StatusCode::BAD_REQUEST, message));
     }
 
     if let Err(e) = state.db.save_upload(&template).await {
         tracing::error!("Failed to save upload: {}", e);
-        return (StatusCode::INTERNAL_SERVER_ERROR, "failed to save upload template".to_string());
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "failed to save upload template".to_string(),
+        ));
     }
-    (StatusCode::OK, String::new())
+    Ok(())
 }
 
 fn normalize_upload_template(template: &mut UploadTemplate) {
@@ -116,12 +138,22 @@ fn validate_upload_template_shape(template: &UploadTemplate) -> Result<(), Strin
 }
 
 pub async fn delete_upload(Path(id): Path<String>, State(state): State<SharedState>) -> StatusCode {
-    if let Err(e) = state.db.delete_upload_and_unlink_downloads(&id).await {
+    match delete_upload_service(&state, &id).await {
+        Ok(()) => StatusCode::OK,
+        Err((status, _)) => status,
+    }
+}
+
+pub async fn delete_upload_service(
+    state: &SharedState,
+    id: &str,
+) -> Result<(), (StatusCode, String)> {
+    if let Err(e) = state.db.delete_upload_and_unlink_downloads(id).await {
         tracing::error!("Failed to delete upload: {}", e);
-        return StatusCode::INTERNAL_SERVER_ERROR;
+        return Err((StatusCode::INTERNAL_SERVER_ERROR, "failed to delete upload".to_string()));
     }
 
-    StatusCode::OK
+    Ok(())
 }
 
 #[cfg(test)]

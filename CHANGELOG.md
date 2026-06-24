@@ -14,7 +14,7 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 - Download task recording files can now be cleared from the web UI when the task is not active.
 - GitHub Release automation now packages Web static files, Linux server bundles, PC desktop binaries, and optional Android artifacts.
 - Release install/start/stop scripts support binary deployment on lightweight Linux servers.
-- The Rust backend can now serve the Dioxus Web UI directly from `BILIUP_WEB_DIR`.
+- The Rust backend now runs as a Dioxus Fullstack server with SSR, Server Functions, and bundled Web assets.
 
 ### Changed
 - Stream checker error classification to distinguish offline from infra failures.
@@ -22,4 +22,4 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 - Download task status now reflects disabled monitoring as `已停止` to make operator intent explicit.
 - Web operation feedback now appears as a compact top overlay and auto-dismisses after five seconds.
 - CI now checks the Dioxus Web WASM target in addition to Rust format, tests, Clippy, and dependency audit.
-- Release and `start-bin.sh` deployments now run a single backend process instead of a separate Python Web server.
+- Release and `start-bin.sh` deployments now run a single Fullstack backend process instead of a separate static Web process.

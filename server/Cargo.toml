@@ -7,7 +7,9 @@ license.workspace = true
 
 [dependencies]
 shared = { path = "../shared" }
+app = { path = "../web", default-features = false, features = ["server"] }
 axum = "0.8.9"
+dioxus-server = { version = "0.7.9", default-features = false, features = ["router"] }
 tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -15,7 +17,7 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 
 reqwest = { workspace = true }
-tower-http = { version = "0.7.0", features = ["cors", "fs"] }
+tower-http = { version = "0.7.0", features = ["cors"] }
 
 anyhow = { workspace = true }
 

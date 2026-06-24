@@ -11,6 +11,7 @@ echo -e "${BLUE}=== OmniStream Binary Startup ===${NC}"
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SERVER_BIN="target/release/server"
 WEB_DIST_DIR=""
+FULLSTACK_PUBLIC_DIR="target/release/public"
 API_PORT="${API_PORT:-3000}"
 PID_DIR=".run"
 SERVER_PID_FILE="${PID_DIR}/server.pid"
@@ -162,7 +163,12 @@ else
     fi
 fi
 
-echo "Using web static directory: ${WEB_DIST_DIR}"
+rm -rf "$FULLSTACK_PUBLIC_DIR"
+mkdir -p "$FULLSTACK_PUBLIC_DIR"
+cp -R "${WEB_DIST_DIR}/." "$FULLSTACK_PUBLIC_DIR/"
+WEB_DIST_DIR="$FULLSTACK_PUBLIC_DIR"
+
+echo "Using Dioxus Fullstack public directory: ${WEB_DIST_DIR}"
 
 # 3.1 确保 favicon 存在并注入到静态 index.html（部分浏览器不会识别运行时注入的 icon）
 FAVICON_SRC="${ROOT_DIR}/web/assets/favicon.svg"
@@ -178,9 +184,9 @@ else
     echo -e "${RED}Warning: favicon source not found: ${FAVICON_SRC}${NC}"
 fi
 
-# 4. 启动后端（内置 Web 静态文件托管）
-echo -e "${GREEN}Starting Backend Server Binary with embedded Web UI...${NC}"
-API_PORT="$API_PORT" BILIUP_WEB_DIR="$WEB_DIST_DIR" BILIUP_DB_PATH="$DB_FILE" BILIUP_COOKIES_DIR="$COOKIES_DIR" BILIUP_RECORDINGS_DIR="$RECORDINGS_DIR" nohup "$SERVER_BIN" > server.log 2>&1 &
+# 4. 启动后端（Dioxus Fullstack SSR + Server Functions）
+echo -e "${GREEN}Starting Backend Server Binary with Dioxus Fullstack SSR...${NC}"
+API_PORT="$API_PORT" BILIUP_DB_PATH="$DB_FILE" BILIUP_COOKIES_DIR="$COOKIES_DIR" BILIUP_RECORDINGS_DIR="$RECORDINGS_DIR" nohup "$SERVER_BIN" > server.log 2>&1 &
 SERVER_PID=$!
 echo "$SERVER_PID" > "$SERVER_PID_FILE"
 echo "Backend Server PID: $SERVER_PID"

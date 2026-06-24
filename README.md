@@ -63,8 +63,8 @@ chmod +x start-bin.sh
 
 该脚本会：
 1. 启动前自动执行后端编译：`cargo build --release -p server --bin server`。
-2. 自动检测前端产物目录（优先 `target/dx/app/release/web/public`），若缺失会自动执行 `dx build --platform web --release`。
-3. 使用 `target/release/server` 启动后端，并由后端内置托管 Web 静态文件。
+2. 自动检测并构建 Dioxus 客户端资源，复制到 `target/release/public` 供 Fullstack SSR 使用。
+3. 使用 `target/release/server` 启动一个 Rust 进程，同时提供 SSR、Server Functions 和兼容 `/api/*` 路由。
 4. 将日志输出到 `server.log`。
 5. 可使用 `./stop.sh` 一键停止服务。
 
@@ -93,7 +93,9 @@ dx serve --platform ios
 dx serve --platform android
 ```
 
-默认 API 地址规则：
+多端默认通过 Dioxus Server Functions 与同一服务进程通信；兼容 REST API 仍保留在 `/api/*`。
+
+默认兼容 API 地址规则：
 
 * `web`: `/api`（同域反向代理）
 * `android`: `http://10.0.2.2:3000/api`
@@ -112,7 +114,7 @@ BILIUP_API_URL=http://<server-ip>:3000/api dx serve --platform android
 
 ## 📦 Release 与二进制部署
 
-推送 `v*` tag 后，GitHub Actions 会生成 Web 静态包、Linux 服务端整包和 PC 桌面端包。腾讯云等 Linux 服务器推荐直接下载 `omnistream-linux-amd64.tar.gz` 或 `omnistream-linux-arm64.tar.gz` 运行。
+推送 `v*` tag 后，GitHub Actions 会生成 Dioxus Web 客户端资源包、Linux Fullstack 服务端整包和 PC 桌面端包。腾讯云等 Linux 服务器推荐直接下载 `omnistream-linux-amd64.tar.gz` 或 `omnistream-linux-arm64.tar.gz` 运行。
 
 服务器最小运行依赖：
 
@@ -189,8 +191,7 @@ just ci
 
 项目已提供容器化部署骨架，包含：
 
-* `Dockerfile.server`：后端服务镜像（内置 `streamlink`/`ffmpeg`）
-* `Dockerfile.web`：前端静态资源镜像（单机静态服务）
+* `Dockerfile.server`：Fullstack 服务镜像（Rust 服务端二进制 + Dioxus 客户端资源 + `streamlink`/`ffmpeg`）
 * `docker-compose.prod.yml`：生产编排
 * `deploy/deploy.sh`：发布脚本（DB 备份、健康检查、失败回滚）
 * `deploy/.env.prod`：生产环境变量文件（直接编辑）
@@ -201,8 +202,7 @@ just ci
 
 * `REGISTRY`：镜像仓库地址（如 `ghcr.io/your-org`）
 * `IMAGE_TAG`：发布版本（如 `v0.1.0` 或 Git SHA）
-* `API_PORT`：后端 API 端口（默认 `3000`）
-* `WEB_PORT`：前端页面端口（默认 `8080`）
+* `API_PORT`：Fullstack 服务端口（默认 `3000`）
 
 ### 2. 执行发布
 
@@ -227,8 +227,7 @@ just ci
 
 ### 4. 访问地址（单机）
 
-* 前端：`http://127.0.0.1:${WEB_PORT}`（默认 `http://127.0.0.1:8080`）
-* 后端：`http://127.0.0.1:${API_PORT}`（默认 `http://127.0.0.1:3000`）
+* Web UI / Server Functions / API：`http://127.0.0.1:${API_PORT}`（默认 `http://127.0.0.1:3000`）
 
 可通过环境变量覆盖录制目录：
 
@@ -242,9 +241,8 @@ BILIUP_RECORDINGS_DIR=/data/recordings
 
 它会在 GitHub Actions 里完成以下事情：
 
-1. 使用 `Dockerfile.server` 构建后端镜像（包含 Rust 编译后的二进制 + ffmpeg + streamlink）。
-2. 使用 `Dockerfile.web` 构建前端镜像（包含编译后的静态文件）。
-3. 推送到镜像仓库（默认 GHCR）。
+1. 使用 `Dockerfile.server` 构建 Fullstack 镜像（包含 Rust 服务端二进制、Dioxus 客户端资源、ffmpeg 和 streamlink）。
+2. 推送到镜像仓库（默认 GHCR）。
 
 这意味着腾讯云服务器只需要拉取镜像运行，不需要安装 Rust 或前端编译工具。
 
@@ -274,8 +272,6 @@ git push origin v0.1.0
 
 1. `ghcr.io/<你的GitHub用户名或组织>/omnistream-server:v0.1.0`
 2. `ghcr.io/<你的GitHub用户名或组织>/omnistream-server:latest`
-3. `ghcr.io/<你的GitHub用户名或组织>/omnistream-web:v0.1.0`
-4. `ghcr.io/<你的GitHub用户名或组织>/omnistream-web:latest`
 
 ### 4. 腾讯云服务器部署
 
@@ -285,7 +281,6 @@ git push origin v0.1.0
 REGISTRY=ghcr.io/<你的GitHub用户名或组织>
 IMAGE_TAG=v0.1.0
 API_PORT=3000
-WEB_PORT=8080
 RUST_LOG=info
 ```
 

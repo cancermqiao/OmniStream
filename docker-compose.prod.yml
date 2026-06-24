@@ -15,14 +15,3 @@ services:
       - ./data:/data
     ports:
       - "${API_PORT:-3000}:3000"
-
-  web:
-    image: ${REGISTRY:-local}/omnistream-web:${IMAGE_TAG:-latest}
-    build:
-      context: .
-      dockerfile: Dockerfile.web
-    restart: unless-stopped
-    depends_on:
-      - server
-    ports:
-      - "${WEB_PORT:-8080}:8080"

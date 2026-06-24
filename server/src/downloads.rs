@@ -18,17 +18,26 @@ use crate::{
 pub async fn list_downloads(
     State(state): State<SharedState>,
 ) -> (StatusCode, Json<Vec<DownloadConfig>>) {
+    match list_downloads_service(&state).await {
+        Ok(downloads) => (StatusCode::OK, Json(downloads)),
+        Err((status, message)) => {
+            tracing::error!("Failed to list downloads: {}", message);
+            (status, Json(vec![]))
+        }
+    }
+}
+
+pub async fn list_downloads_service(
+    state: &SharedState,
+) -> Result<Vec<DownloadConfig>, (StatusCode, String)> {
     match state.db.get_downloads().await {
         Ok(mut downloads) => {
             for d in &mut downloads {
-                d.current_status = Some(resolve_download_status(&state, d));
+                d.current_status = Some(resolve_download_status(state, d));
             }
-            (StatusCode::OK, Json(downloads))
+            Ok(downloads)
         }
-        Err(e) => {
-            tracing::error!("Failed to list downloads: {}", e);
-            (StatusCode::INTERNAL_SERVER_ERROR, Json(vec![]))
-        }
+        Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, e.to_string())),
     }
 }
 
@@ -36,22 +45,32 @@ pub async fn add_download(
     State(state): State<SharedState>,
     Json(payload): Json<DownloadConfig>,
 ) -> (StatusCode, String) {
+    match save_download_service(&state, payload).await {
+        Ok(()) => (StatusCode::OK, String::new()),
+        Err(response) => response,
+    }
+}
+
+pub async fn save_download_service(
+    state: &SharedState,
+    payload: DownloadConfig,
+) -> Result<(), (StatusCode, String)> {
     let mut config = payload;
     if config.id.is_empty() {
         config.id = Uuid::new_v4().to_string();
     }
     normalize_download_config(&mut config);
 
-    if let Err((status, message)) = validate_download_config(&state, &config).await {
+    if let Err((status, message)) = validate_download_config(state, &config).await {
         tracing::warn!("Rejected download config update: {}", message);
-        return (status, message);
+        return Err((status, message));
     }
 
     if let Err(e) = state.db.save_download(&config).await {
         tracing::error!("Failed to save download: {}", e);
-        return (StatusCode::INTERNAL_SERVER_ERROR, "failed to save download".to_string());
+        return Err((StatusCode::INTERNAL_SERVER_ERROR, "failed to save download".to_string()));
     }
-    (StatusCode::OK, String::new())
+    Ok(())
 }
 
 fn normalize_download_config(config: &mut DownloadConfig) {
@@ -122,27 +141,37 @@ pub async fn stop_download(
     Path(id): Path<String>,
     State(state): State<SharedState>,
 ) -> (StatusCode, String) {
-    let download = match find_download(&state, &id).await {
+    match stop_download_service(&state, &id).await {
+        Ok(message) => (StatusCode::OK, message),
+        Err(response) => response,
+    }
+}
+
+pub async fn stop_download_service(
+    state: &SharedState,
+    id: &str,
+) -> Result<String, (StatusCode, String)> {
+    let download = match find_download(state, id).await {
         Ok(Some(download)) => download,
-        Ok(None) => return (StatusCode::NOT_FOUND, "download not found".to_string()),
+        Ok(None) => return Err((StatusCode::NOT_FOUND, "download not found".to_string())),
         Err(e) => {
             tracing::error!("Failed to load download before stop, id={}: {}", id, e);
-            return (StatusCode::INTERNAL_SERVER_ERROR, "failed to load download".to_string());
+            return Err((StatusCode::INTERNAL_SERVER_ERROR, "failed to load download".to_string()));
         }
     };
 
-    if let Err(e) = state.db.set_download_enabled(&id, false).await {
+    if let Err(e) = state.db.set_download_enabled(id, false).await {
         tracing::error!("Failed to disable download, id={}: {}", id, e);
-        return (StatusCode::INTERNAL_SERVER_ERROR, "failed to stop download".to_string());
+        return Err((StatusCode::INTERNAL_SERVER_ERROR, "failed to stop download".to_string()));
     }
 
-    let stopped_count = stop_active_tasks_for_url(&state, &download.url).await;
+    let stopped_count = stop_active_tasks_for_url(state, &download.url).await;
     state.checking_urls.remove(&download.url);
 
     if stopped_count == 0 {
-        (StatusCode::OK, "download monitoring stopped".to_string())
+        Ok("download monitoring stopped".to_string())
     } else {
-        (StatusCode::OK, format!("stopped {stopped_count} active task(s)"))
+        Ok(format!("stopped {stopped_count} active task(s)"))
     }
 }
 
@@ -150,47 +179,67 @@ pub async fn resume_download(
     Path(id): Path<String>,
     State(state): State<SharedState>,
 ) -> (StatusCode, String) {
-    match find_download(&state, &id).await {
+    match resume_download_service(&state, &id).await {
+        Ok(message) => (StatusCode::OK, message),
+        Err(response) => response,
+    }
+}
+
+pub async fn resume_download_service(
+    state: &SharedState,
+    id: &str,
+) -> Result<String, (StatusCode, String)> {
+    match find_download(state, id).await {
         Ok(Some(_)) => {}
-        Ok(None) => return (StatusCode::NOT_FOUND, "download not found".to_string()),
+        Ok(None) => return Err((StatusCode::NOT_FOUND, "download not found".to_string())),
         Err(e) => {
             tracing::error!("Failed to load download before resume, id={}: {}", id, e);
-            return (StatusCode::INTERNAL_SERVER_ERROR, "failed to load download".to_string());
+            return Err((StatusCode::INTERNAL_SERVER_ERROR, "failed to load download".to_string()));
         }
     }
 
-    if let Err(e) = state.db.set_download_enabled(&id, true).await {
+    if let Err(e) = state.db.set_download_enabled(id, true).await {
         tracing::error!("Failed to resume download, id={}: {}", id, e);
-        return (StatusCode::INTERNAL_SERVER_ERROR, "failed to resume download".to_string());
+        return Err((StatusCode::INTERNAL_SERVER_ERROR, "failed to resume download".to_string()));
     }
 
-    (StatusCode::OK, "download monitoring resumed".to_string())
+    Ok("download monitoring resumed".to_string())
 }
 
 pub async fn clear_download_files(
     Path(id): Path<String>,
     State(state): State<SharedState>,
 ) -> (StatusCode, String) {
-    let download = match find_download(&state, &id).await {
+    match clear_download_files_service(&state, &id).await {
+        Ok(message) => (StatusCode::OK, message),
+        Err(response) => response,
+    }
+}
+
+pub async fn clear_download_files_service(
+    state: &SharedState,
+    id: &str,
+) -> Result<String, (StatusCode, String)> {
+    let download = match find_download(state, id).await {
         Ok(Some(download)) => download,
-        Ok(None) => return (StatusCode::NOT_FOUND, "download not found".to_string()),
+        Ok(None) => return Err((StatusCode::NOT_FOUND, "download not found".to_string())),
         Err(e) => {
             tracing::error!("Failed to load download before clearing files, id={}: {}", id, e);
-            return (StatusCode::INTERNAL_SERVER_ERROR, "failed to load download".to_string());
+            return Err((StatusCode::INTERNAL_SERVER_ERROR, "failed to load download".to_string()));
         }
     };
 
-    if has_active_tasks_for_url(&state, &download.url)
+    if has_active_tasks_for_url(state, &download.url)
         || state.checking_urls.contains_key(&download.url)
     {
-        return (StatusCode::CONFLICT, "stop the download before clearing files".to_string());
+        return Err((StatusCode::CONFLICT, "stop the download before clearing files".to_string()));
     }
 
     let task_dir = recording::recording_task_dir(&download.name);
     match tokio::fs::try_exists(&task_dir).await {
-        Ok(false) => (StatusCode::OK, "recording directory is already empty".to_string()),
+        Ok(false) => Ok("recording directory is already empty".to_string()),
         Ok(true) => match tokio::fs::remove_dir_all(&task_dir).await {
-            Ok(()) => (StatusCode::OK, "recording files cleared".to_string()),
+            Ok(()) => Ok("recording files cleared".to_string()),
             Err(e) => {
                 tracing::error!(
                     "Failed to clear recording files, id={}, dir={}: {}",
@@ -198,7 +247,10 @@ pub async fn clear_download_files(
                     task_dir.display(),
                     e
                 );
-                (StatusCode::INTERNAL_SERVER_ERROR, "failed to clear recording files".to_string())
+                Err((
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "failed to clear recording files".to_string(),
+                ))
             }
         },
         Err(e) => {
@@ -208,7 +260,10 @@ pub async fn clear_download_files(
                 task_dir.display(),
                 e
             );
-            (StatusCode::INTERNAL_SERVER_ERROR, "failed to inspect recording directory".to_string())
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "failed to inspect recording directory".to_string(),
+            ))
         }
     }
 }
@@ -265,11 +320,21 @@ pub async fn trigger_manual_upload(
     Path(id): Path<String>,
     State(state): State<SharedState>,
 ) -> (StatusCode, String) {
+    match trigger_manual_upload_service(&state, &id).await {
+        Ok((status, message)) => (status, message),
+        Err(response) => response,
+    }
+}
+
+pub async fn trigger_manual_upload_service(
+    state: &SharedState,
+    id: &str,
+) -> Result<(StatusCode, String), (StatusCode, String)> {
     tracing::info!("Manual upload request received, download_id={}", id);
 
-    let download = match load_download_for_manual_upload(&state, &id).await {
+    let download = match load_download_for_manual_upload(state, id).await {
         Ok(download) => download,
-        Err(response) => return response,
+        Err(response) => return Err(response),
     };
 
     tracing::info!(
@@ -281,12 +346,12 @@ pub async fn trigger_manual_upload(
 
     if download.linked_upload_ids.is_empty() {
         tracing::warn!("Manual upload rejected: no linked upload templates, id={}", download.id);
-        return (StatusCode::BAD_REQUEST, "no linked upload templates".to_string());
+        return Err((StatusCode::BAD_REQUEST, "no linked upload templates".to_string()));
     }
 
-    let upload_configs = match resolve_manual_upload_configs(&state, &download).await {
+    let upload_configs = match resolve_manual_upload_configs(state, &download).await {
         Ok(configs) => configs,
-        Err(response) => return response,
+        Err(response) => return Err(response),
     };
 
     if upload_configs.is_empty() {
@@ -294,7 +359,7 @@ pub async fn trigger_manual_upload(
             "Manual upload rejected: linked templates missing in DB, id={}",
             download.id
         );
-        return (StatusCode::BAD_REQUEST, "linked upload templates are missing".to_string());
+        return Err((StatusCode::BAD_REQUEST, "linked upload templates are missing".to_string()));
     }
 
     let task_dir = recording::recording_task_dir(&download.name);
@@ -302,17 +367,17 @@ pub async fn trigger_manual_upload(
         Ok(files) => files,
         Err(ScanRecordingFilesError::NotFound(message)) => {
             tracing::error!("Failed to open recording dir {}: {}", task_dir.display(), message);
-            return (
+            return Err((
                 StatusCode::NOT_FOUND,
                 format!("recording directory not found: {}", task_dir.display()),
-            );
+            ));
         }
         Err(ScanRecordingFilesError::ReadFailed(message)) => {
             tracing::error!("Failed to read recording dir {}: {}", task_dir.display(), message);
-            return (
+            return Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "failed to scan recording files".to_string(),
-            );
+            ));
         }
     };
 
@@ -324,15 +389,15 @@ pub async fn trigger_manual_upload(
     );
 
     if files.is_empty() {
-        return (
+        return Err((
             StatusCode::BAD_REQUEST,
             format!("no recording files found in {}", task_dir.display()),
-        );
+        ));
     }
 
     let live_title = state.checker.fetch_live_title(&download.url).await;
     let task_name = download.name.clone();
-    let auto_cleanup_after_upload = resolve_auto_cleanup_after_upload(&state, &download).await;
+    let auto_cleanup_after_upload = resolve_auto_cleanup_after_upload(state, &download).await;
 
     let manual_task_id = format!("manual-upload-{}", Uuid::new_v4());
     tracing::info!(
@@ -358,7 +423,7 @@ pub async fn trigger_manual_upload(
         .await;
     });
 
-    (StatusCode::ACCEPTED, "manual upload started".to_string())
+    Ok((StatusCode::ACCEPTED, "manual upload started".to_string()))
 }
 
 fn resolve_download_status(state: &SharedState, download: &DownloadConfig) -> String {
@@ -415,11 +480,21 @@ pub async fn delete_download(
     Path(id): Path<String>,
     State(state): State<SharedState>,
 ) -> StatusCode {
-    if let Err(e) = state.db.delete_download(&id).await {
-        tracing::error!("Failed to delete download: {}", e);
-        return StatusCode::INTERNAL_SERVER_ERROR;
+    match delete_download_service(&state, &id).await {
+        Ok(()) => StatusCode::OK,
+        Err((status, _)) => status,
     }
-    StatusCode::OK
+}
+
+pub async fn delete_download_service(
+    state: &SharedState,
+    id: &str,
+) -> Result<(), (StatusCode, String)> {
+    if let Err(e) = state.db.delete_download(id).await {
+        tracing::error!("Failed to delete download: {}", e);
+        return Err((StatusCode::INTERNAL_SERVER_ERROR, "failed to delete download".to_string()));
+    }
+    Ok(())
 }
 
 #[cfg(test)]

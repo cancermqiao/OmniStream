@@ -5,6 +5,8 @@ use serde_json::Value;
 use tokio::process::Command;
 use url::Url;
 
+use crate::platform::{LivePlatform, detect_platform, resolve_stream};
+
 pub const STREAMLINK_PATH: &str = "streamlink";
 
 #[derive(Clone)]
@@ -26,7 +28,10 @@ impl StreamlinkChecker {
             if output.status.success() {
                 return Ok(false);
             }
-            return classify_streamlink_error(stderr.trim());
+            return match classify_streamlink_error(stderr.trim()) {
+                Ok(v) => Ok(v),
+                Err(e) => check_live_with_platform_resolver(url, e).await,
+            };
         }
 
         // Parse JSON
@@ -36,7 +41,10 @@ impl StreamlinkChecker {
         // Check if "streams" is present and not empty
         // Structure is usually: { "streams": { "best": ... }, ... } or { "error": ... }
         if let Some(error) = json.get("error").and_then(|v| v.as_str()) {
-            return classify_streamlink_error(error);
+            return match classify_streamlink_error(error) {
+                Ok(v) => Ok(v),
+                Err(e) => check_live_with_platform_resolver(url, e).await,
+            };
         }
 
         if let Some(streams) = json.get("streams")
@@ -57,7 +65,7 @@ impl StreamlinkChecker {
                     url,
                     e
                 );
-                return fetch_huya_live_title(url).await;
+                return fetch_platform_live_title(url).await;
             }
         };
 
@@ -71,7 +79,7 @@ impl StreamlinkChecker {
                     stderr.trim()
                 );
             }
-            return fetch_huya_live_title(url).await;
+            return fetch_platform_live_title(url).await;
         }
 
         let json: Value = match serde_json::from_str(&stdout) {
@@ -82,7 +90,7 @@ impl StreamlinkChecker {
                     url,
                     e
                 );
-                return fetch_huya_live_title(url).await;
+                return fetch_platform_live_title(url).await;
             }
         };
         let title = extract_title(&json);
@@ -90,8 +98,35 @@ impl StreamlinkChecker {
             return title;
         }
 
-        fetch_huya_live_title(url).await
+        fetch_platform_live_title(url).await
     }
+}
+
+async fn check_live_with_platform_resolver(url: &str, source_error: anyhow::Error) -> Result<bool> {
+    match resolve_stream(url, "best").await {
+        Ok(Some(_)) => Ok(true),
+        Ok(None) => Err(source_error),
+        Err(e) => Err(anyhow!(
+            "Streamlink check failed and platform resolver failed: {}; resolver: {}",
+            source_error,
+            e
+        )),
+    }
+}
+
+async fn fetch_platform_live_title(url: &str) -> Option<String> {
+    match detect_platform(url) {
+        LivePlatform::Douyu | LivePlatform::Douyin => {
+            if let Ok(Some(stream)) = resolve_stream(url, "best").await
+                && stream.title.is_some()
+            {
+                return stream.title;
+            }
+        }
+        _ => {}
+    }
+
+    fetch_huya_live_title(url).await
 }
 
 fn extract_title(json: &Value) -> Option<String> {
