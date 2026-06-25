@@ -1,6 +1,11 @@
 FROM rust:1.93-bookworm AS builder
 WORKDIR /build
 
+# GitHub buildx runners are memory constrained, especially for multi-arch builds.
+ENV CARGO_BUILD_JOBS=2 \
+    CARGO_PROFILE_RELEASE_LTO=false \
+    CARGO_PROFILE_RELEASE_CODEGEN_UNITS=16
+
 RUN cargo install dioxus-cli --locked
 
 COPY Cargo.toml Cargo.lock ./

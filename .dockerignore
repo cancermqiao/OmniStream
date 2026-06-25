@@ -1,0 +1,10 @@
+.git
+.github
+target
+**/target
+data
+server.log
+web.log
+*.log
+.DS_Store
+qrcode.png
