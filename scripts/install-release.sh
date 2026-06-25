@@ -5,7 +5,6 @@ REPO="${OMNISTREAM_REPO:-}"
 TAG="${OMNISTREAM_TAG:-latest}"
 ARCH="${OMNISTREAM_ARCH:-linux-amd64}"
 INSTALL_DIR="${OMNISTREAM_HOME:-$HOME/omnistream}"
-API_BASE="${GITHUB_API_URL:-https://api.github.com}"
 
 usage() {
   cat <<'EOF'
@@ -65,34 +64,30 @@ case "$ARCH" in
     ;;
 esac
 
-for cmd in curl python3 tar; do
+for cmd in curl tar; do
   if ! command -v "$cmd" >/dev/null 2>&1; then
     echo "missing required command: $cmd"
     exit 1
   fi
 done
 
-if [[ "$TAG" == "latest" ]]; then
-  RELEASE_URL="$API_BASE/repos/$REPO/releases/latest"
-else
-  RELEASE_URL="$API_BASE/repos/$REPO/releases/tags/$TAG"
-fi
-
 ASSET_NAME="omnistream-${ARCH}.tar.gz"
-DOWNLOAD_URL="$(curl -fsSL "$RELEASE_URL" \
-  | python3 -c 'import json,sys; data=json.load(sys.stdin); name=sys.argv[1]; matches=[a["browser_download_url"] for a in data.get("assets", []) if a.get("name")==name]; print(matches[0] if matches else "")' "$ASSET_NAME")"
-
-if [[ -z "$DOWNLOAD_URL" ]]; then
-  echo "release asset not found: $ASSET_NAME"
-  echo "release: $RELEASE_URL"
-  exit 1
+if [[ "$TAG" == "latest" ]]; then
+  DOWNLOAD_URL="https://github.com/${REPO}/releases/latest/download/${ASSET_NAME}"
+else
+  DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${TAG}/${ASSET_NAME}"
 fi
 
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
 echo "Downloading $ASSET_NAME ..."
-curl -fL "$DOWNLOAD_URL" -o "$TMP_DIR/$ASSET_NAME"
+if ! curl -fL "$DOWNLOAD_URL" -o "$TMP_DIR/$ASSET_NAME"; then
+  echo "failed to download release asset: $ASSET_NAME"
+  echo "url: $DOWNLOAD_URL"
+  echo "Please make sure the Release exists and contains this asset."
+  exit 1
+fi
 
 mkdir -p "$INSTALL_DIR"
 tar -xzf "$TMP_DIR/$ASSET_NAME" -C "$INSTALL_DIR" --strip-components=1

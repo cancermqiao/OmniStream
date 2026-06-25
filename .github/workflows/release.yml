@@ -146,12 +146,27 @@ jobs:
           - name: desktop-linux-amd64
             runner: ubuntu-24.04
             binary: app
+            app_binary: OmniStream
+            archive_ext: tar.gz
+            platform_label: Linux x64
+          - name: desktop-macos-amd64
+            runner: macos-13
+            binary: app
+            app_binary: OmniStream
+            archive_ext: zip
+            platform_label: macOS Intel
           - name: desktop-macos-arm64
             runner: macos-14
             binary: app
+            app_binary: OmniStream
+            archive_ext: zip
+            platform_label: macOS Apple Silicon
           - name: desktop-windows-amd64
             runner: windows-latest
             binary: app.exe
+            app_binary: OmniStream.exe
+            archive_ext: zip
+            platform_label: Windows x64
     runs-on: ${{ matrix.runner }}
     steps:
       - name: Checkout
@@ -178,11 +193,34 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p release-assets
-          cp "target/release/${{ matrix.binary }}" "release-assets/${{ matrix.binary }}"
+          bundle="omnistream-${{ matrix.name }}"
+          mkdir -p "release-assets/$bundle"
+          cp "target/release/${{ matrix.binary }}" "release-assets/$bundle/${{ matrix.app_binary }}"
+          chmod +x "release-assets/$bundle/${{ matrix.app_binary }}" || true
+          cat > "release-assets/$bundle/README.txt" <<'EOF'
+          OmniStream Desktop
+
+          Platform: ${{ matrix.platform_label }}
+
+          How to use:
+          1. Start the OmniStream server first. For remote servers, download and run the Linux Fullstack package.
+          2. Run this desktop app.
+          3. If the backend is not on 127.0.0.1:3000, start the app with BILIUP_API_URL=http://<server-ip>:3000/api.
+
+          Runtime dependencies:
+          - The desktop app needs network access to an OmniStream backend.
+          - Recording still happens on the backend machine and requires ffmpeg and streamlink there.
+
+          macOS note:
+          If macOS blocks the app because it is unsigned, run:
+            xattr -dr com.apple.quarantine OmniStream
+          EOF
           if [[ "${{ runner.os }}" == "Windows" ]]; then
-            7z a "release-assets/omnistream-${{ matrix.name }}.zip" "release-assets/${{ matrix.binary }}"
+            7z a "release-assets/$bundle.zip" "release-assets/$bundle"
+          elif [[ "${{ matrix.archive_ext }}" == "zip" ]]; then
+            (cd release-assets && zip -r "$bundle.zip" "$bundle")
           else
-            tar -czf "release-assets/omnistream-${{ matrix.name }}.tar.gz" -C release-assets "${{ matrix.binary }}"
+            tar -czf "release-assets/$bundle.tar.gz" -C release-assets "$bundle"
           fi
 
       - name: Upload Desktop artifact
@@ -190,8 +228,7 @@ jobs:
         with:
           name: ${{ matrix.name }}
           path: |
-            release-assets/omnistream-${{ matrix.name }}.tar.gz
-            release-assets/omnistream-${{ matrix.name }}.zip
+            release-assets/omnistream-${{ matrix.name }}.${{ matrix.archive_ext }}
 
   android-package:
     if: github.event_name == 'workflow_dispatch' && inputs.build_android

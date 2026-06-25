@@ -114,7 +114,47 @@ BILIUP_API_URL=http://<server-ip>:3000/api dx serve --platform android
 
 ## 📦 Release 与二进制部署
 
-推送 `v*` tag 后，GitHub Actions 会生成 Dioxus Web 客户端资源包、Linux Fullstack 服务端整包和 PC 桌面端包。腾讯云等 Linux 服务器推荐直接下载 `omnistream-linux-amd64.tar.gz` 或 `omnistream-linux-arm64.tar.gz` 运行。
+推送 `v*` tag 后，GitHub Actions 会生成 Dioxus Web 客户端资源包、Linux Fullstack 服务端整包，以及 Windows/macOS/Linux 桌面端下载包。腾讯云等 Linux 服务器推荐直接下载 `omnistream-linux-amd64.tar.gz` 或 `omnistream-linux-arm64.tar.gz` 运行。
+
+桌面端下载建议：
+
+- Windows x64：下载 `omnistream-desktop-windows-amd64.zip`，解压后运行 `OmniStream.exe`。
+- macOS Apple Silicon：下载 `omnistream-desktop-macos-arm64.zip`，解压后运行 `OmniStream`。
+- macOS Intel：下载 `omnistream-desktop-macos-amd64.zip`，解压后运行 `OmniStream`。
+- Linux x64：下载 `omnistream-desktop-linux-amd64.tar.gz`，解压后运行 `OmniStream`。
+
+桌面端主要用于本地可视化操作，仍需要能访问 OmniStream 后端服务。后端不在本机时，可用 `BILIUP_API_URL=http://<server-ip>:3000/api` 指定地址。
+
+macOS 下载并启动最新版桌面端示例：
+
+```bash
+REPO="cancermqiao/OmniStream"
+MAC_ARCH="$(uname -m)"
+
+if [ "$MAC_ARCH" = "arm64" ]; then
+  ASSET="omnistream-desktop-macos-arm64.zip"
+else
+  ASSET="omnistream-desktop-macos-amd64.zip"
+fi
+
+curl -L -o "$ASSET" "https://github.com/$REPO/releases/latest/download/$ASSET"
+rm -rf OmniStream-desktop
+unzip -o "$ASSET" -d OmniStream-desktop
+
+cd "OmniStream-desktop/${ASSET%.zip}"
+chmod +x OmniStream
+
+# 当前 macOS 产物未做 Apple Developer 签名，如被系统拦截，执行一次解除隔离标记。
+xattr -dr com.apple.quarantine OmniStream
+
+# 本机后端示例。若后端部署在服务器，把地址改成 http://<server-ip>:3000/api。
+BILIUP_API_URL=http://127.0.0.1:3000/api ./OmniStream
+```
+
+其他 PC 端可在 GitHub Release 页面下载：
+
+- Windows x64：`https://github.com/cancermqiao/OmniStream/releases/latest/download/omnistream-desktop-windows-amd64.zip`
+- Linux x64：`https://github.com/cancermqiao/OmniStream/releases/latest/download/omnistream-desktop-linux-amd64.tar.gz`
 
 服务器最小运行依赖：
 
@@ -126,9 +166,12 @@ sudo apt-get install -y ca-certificates curl ffmpeg streamlink
 一键安装最新 Release：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/OWNER/REPO/main/scripts/install-release.sh \
-  | bash -s -- --repo OWNER/REPO --tag latest --arch linux-amd64 --dir /opt/omnistream
+curl -fsSL https://raw.githubusercontent.com/cancermqiao/OmniStream/main/scripts/install-release.sh \
+  | bash -s -- --repo cancermqiao/OmniStream --tag latest --arch linux-amd64 --dir /opt/omnistream
 ```
+
+注意：命令中的 URL 不要加反引号。如果安装到 `/opt/omnistream` 遇到权限问题，将 `bash` 改为 `sudo bash`。
+该命令依赖 GitHub Release 中已经存在 `omnistream-linux-amd64.tar.gz`。如果下载产物返回 404，请先推送新的 `v*` tag，并等待 Release workflow 构建完成。
 
 启动服务：
 
