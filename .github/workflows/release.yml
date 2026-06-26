@@ -278,14 +278,10 @@ jobs:
     needs:
       - web-static
       - linux-package
-      - desktop-package
-      - android-package
     if: >
       always()
       && needs.web-static.result == 'success'
       && needs.linux-package.result == 'success'
-      && needs.desktop-package.result == 'success'
-      && (needs.android-package.result == 'success' || needs.android-package.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
       - name: Resolve release tag
@@ -310,3 +306,40 @@ jobs:
           tag_name: ${{ steps.release.outputs.tag }}
           files: release-assets/*
           generate_release_notes: true
+
+  publish-desktop-release:
+    needs:
+      - publish-github-release
+      - desktop-package
+      - android-package
+    if: >
+      always()
+      && needs.publish-github-release.result == 'success'
+      && needs.desktop-package.result == 'success'
+      && (needs.android-package.result == 'success' || needs.android-package.result == 'skipped')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve release tag
+        id: release
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${{ inputs.release_tag }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets
+          merge-multiple: true
+
+      - name: Publish desktop GitHub Release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.release.outputs.tag }}
+          files: |
+            release-assets/omnistream-desktop-*
+            release-assets/omnistream-android-unsigned.tar.gz
+          fail_on_unmatched_files: false
