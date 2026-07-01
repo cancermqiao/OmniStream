@@ -158,9 +158,28 @@ BILIUP_API_URL=http://127.0.0.1:3000/api ./OmniStream
 
 服务器最小运行依赖：
 
+Ubuntu / Debian：
+
 ```bash
 sudo apt-get update
-sudo apt-get install -y ca-certificates curl ffmpeg streamlink
+sudo apt-get install -y ca-certificates curl ffmpeg
+```
+
+CentOS Stream / RHEL 系：
+
+```bash
+sudo dnf install -y ca-certificates curl dnf-plugins-core epel-release
+sudo dnf install -y "https://download1.rpmfusion.org/free/el/rpmfusion-free-release-$(rpm -E %rhel).noarch.rpm"
+sudo dnf install -y ffmpeg
+```
+
+`streamlink` 统一使用 `uv` 安装。请使用运行 OmniStream 服务的同一个用户执行，确保 `streamlink` 在该用户的 `PATH` 中：
+
+```bash
+command -v uv >/dev/null 2>&1 || curl -LsSf https://astral.sh/uv/install.sh | sh
+export PATH="$HOME/.local/bin:$PATH"
+uv tool install streamlink
+streamlink --version
 ```
 
 一键安装最新 Release：
