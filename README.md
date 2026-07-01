@@ -191,6 +191,26 @@ curl -fsSL https://raw.githubusercontent.com/cancermqiao/OmniStream/main/scripts
 
 注意：命令中的 URL 不要加反引号。如果安装到 `/opt/omnistream` 遇到权限问题，将 `bash` 改为 `sudo bash`。
 该命令依赖 GitHub Release 中已经存在 `omnistream-linux-amd64.tar.gz`。如果下载产物返回 404，请先推送新的 `v*` tag，并等待 Release workflow 构建完成。
+安装脚本会覆盖 `bin/` 和 `scripts/` 等运行文件，并显式保留 `/opt/omnistream/data/`，因此升级不会删除默认数据库、账号 cookies 和已下载视频文件。
+
+覆盖升级最新 Release：
+
+```bash
+cd /opt/omnistream
+./scripts/release-stop.sh
+
+curl -fsSL https://raw.githubusercontent.com/cancermqiao/OmniStream/main/scripts/install-release.sh \
+  | sudo bash -s -- --repo cancermqiao/OmniStream --tag latest --arch linux-amd64 --dir /opt/omnistream
+
+cd /opt/omnistream
+API_PORT=3000 ./scripts/release-start.sh
+```
+
+默认持久化数据位置：
+
+- `/opt/omnistream/data/omnistream.db`：SQLite 数据库
+- `/opt/omnistream/data/cookies/`：账号 cookies 与账号元数据
+- `/opt/omnistream/data/recordings/`：已录制/下载的视频文件
 
 启动服务：
 

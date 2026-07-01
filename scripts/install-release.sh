@@ -90,10 +90,19 @@ if ! curl -fL "$DOWNLOAD_URL" -o "$TMP_DIR/$ASSET_NAME"; then
 fi
 
 mkdir -p "$INSTALL_DIR"
-tar -xzf "$TMP_DIR/$ASSET_NAME" -C "$INSTALL_DIR" --strip-components=1
+echo "Installing runtime files while preserving existing data under $INSTALL_DIR/data ..."
+tar \
+  --exclude='data' \
+  --exclude='data/*' \
+  --exclude='*/data' \
+  --exclude='*/data/*' \
+  -xzf "$TMP_DIR/$ASSET_NAME" \
+  -C "$INSTALL_DIR" \
+  --strip-components=1
 chmod +x "$INSTALL_DIR/bin/server" "$INSTALL_DIR/scripts/release-start.sh" "$INSTALL_DIR/scripts/release-stop.sh"
 
 echo "Installed OmniStream to $INSTALL_DIR"
+echo "Preserved data directory: $INSTALL_DIR/data"
 echo "Next steps:"
 echo "  cd $INSTALL_DIR"
 echo "  ./scripts/release-start.sh"
