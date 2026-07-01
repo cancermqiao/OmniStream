@@ -242,6 +242,9 @@ fn quality_for_url(url: &str, quality: &shared::PlatformQualityConfig) -> String
     if u.contains("youtube.com") || u.contains("youtu.be") {
         return quality.youtube.clone();
     }
+    if u.contains("kick.com") {
+        return quality.kick.clone();
+    }
     quality.default_quality.clone()
 }
 
@@ -287,6 +290,7 @@ mod tests {
             douyin: "douyin".to_string(),
             twitch: "twitch".to_string(),
             youtube: "youtube".to_string(),
+            kick: "kick".to_string(),
             default_quality: "default".to_string(),
         };
 
@@ -297,5 +301,6 @@ mod tests {
         );
         assert_eq!(quality_for_url("https://live.douyin.com/393646574978", &quality), "douyin");
         assert_eq!(quality_for_url("https://www.twitch.tv/seucreysonreborn", &quality), "twitch");
+        assert_eq!(quality_for_url("https://kick.com/topson", &quality), "kick");
     }
 }

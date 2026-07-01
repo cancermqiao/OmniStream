@@ -168,6 +168,8 @@ pub struct PlatformQualityConfig {
     pub douyin: String,
     pub twitch: String,
     pub youtube: String,
+    #[serde(default = "default_quality")]
+    pub kick: String,
     pub default_quality: String,
 }
 
@@ -185,6 +187,7 @@ impl Default for PlatformQualityConfig {
             douyin: "best".to_string(),
             twitch: "best".to_string(),
             youtube: "best".to_string(),
+            kick: "best".to_string(),
             default_quality: "best".to_string(),
         }
     }
@@ -228,6 +231,23 @@ mod tests {
         let json = "{}";
         let config: UploadConfig = serde_json::from_str(json).expect("valid upload config json");
         assert_eq!(config, UploadConfig::default());
+    }
+
+    #[test]
+    fn platform_quality_config_deserialize_defaults_kick_quality() {
+        let json = r#"{
+            "bilibili":"best",
+            "douyu":"best",
+            "huya":"best",
+            "twitch":"best",
+            "youtube":"best",
+            "default_quality":"best"
+        }"#;
+
+        let config: super::PlatformQualityConfig =
+            serde_json::from_str(json).expect("valid quality config json");
+
+        assert_eq!(config.kick, "best");
     }
 
     #[test]

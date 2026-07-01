@@ -23,6 +23,7 @@ pub fn SettingsPage(
     let mut douyin = use_signal(|| settings.quality.douyin.clone());
     let mut twitch = use_signal(|| settings.quality.twitch.clone());
     let mut youtube = use_signal(|| settings.quality.youtube.clone());
+    let mut kick = use_signal(|| settings.quality.kick.clone());
     let mut default_quality = use_signal(|| settings.quality.default_quality.clone());
     let mut auto_cleanup_after_upload = use_signal(|| settings.auto_cleanup_after_upload);
     let mut form_error = use_signal::<Option<String>>(|| None);
@@ -98,6 +99,7 @@ pub fn SettingsPage(
                     QualitySelect { label: "抖音 画质".to_string(), value: douyin, on_change: move |v| douyin.set(v) }
                     QualitySelect { label: "Twitch 画质".to_string(), value: twitch, on_change: move |v| twitch.set(v) }
                     QualitySelect { label: "YouTube 画质".to_string(), value: youtube, on_change: move |v| youtube.set(v) }
+                    QualitySelect { label: "Kick 画质".to_string(), value: kick, on_change: move |v| kick.set(v) }
                     QualitySelect { label: "默认画质".to_string(), value: default_quality, on_change: move |v| default_quality.set(v) }
                 }
 
@@ -163,6 +165,7 @@ pub fn SettingsPage(
                                     douyin: douyin(),
                                     twitch: twitch(),
                                     youtube: youtube(),
+                                    kick: kick(),
                                     default_quality: default_quality(),
                                 },
                                 auto_cleanup_after_upload: auto_cleanup_after_upload(),

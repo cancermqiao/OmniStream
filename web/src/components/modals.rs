@@ -33,6 +33,7 @@ pub fn DownloadModal(
     let mut q_douyin = use_signal(|| base_settings.quality.douyin.clone());
     let mut q_twitch = use_signal(|| base_settings.quality.twitch.clone());
     let mut q_youtube = use_signal(|| base_settings.quality.youtube.clone());
+    let mut q_kick = use_signal(|| base_settings.quality.kick.clone());
     let mut q_default = use_signal(|| base_settings.quality.default_quality.clone());
     let mut form_error = use_signal::<Option<String>>(|| None);
 
@@ -108,6 +109,7 @@ pub fn DownloadModal(
                         QualitySelect { label: "抖音 画质".to_string(), value: q_douyin, on_change: move |v| q_douyin.set(v) }
                         QualitySelect { label: "Twitch 画质".to_string(), value: q_twitch, on_change: move |v| q_twitch.set(v) }
                         QualitySelect { label: "YouTube 画质".to_string(), value: q_youtube, on_change: move |v| q_youtube.set(v) }
+                        QualitySelect { label: "Kick 画质".to_string(), value: q_kick, on_change: move |v| q_kick.set(v) }
                         QualitySelect { label: "默认画质".to_string(), value: q_default, on_change: move |v| q_default.set(v) }
                     }
                     label { class: "mini-check",
@@ -166,6 +168,7 @@ pub fn DownloadModal(
                                     douyin: q_douyin(),
                                     twitch: q_twitch(),
                                     youtube: q_youtube(),
+                                    kick: q_kick(),
                                     default_quality: q_default(),
                                 },
                                 auto_cleanup_after_upload: auto_cleanup_after_upload(),

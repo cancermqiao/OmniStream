@@ -5,7 +5,7 @@ OmniStream 是一个高性能、低资源占用的 B 站直播录制与上传工
 ## ✨ 特性
 
 *   **全异步架构**: 基于 Tokio + Axum，高并发处理能力。
-*   **自动监听**: 支持 Bilibili, Douyu, Huya, Twitch 等主流平台直播状态检测。
+*   **自动监听**: 支持 Bilibili, Douyu, Huya, Twitch, YouTube, Kick 等主流平台直播状态检测。
     *   **API 优先**: 优先使用官方 API 检测，极低资源消耗。
     *   **FFmpeg 兜底**: API 失效时自动降级为流探测。
 *   **持久化存储**: 使用 SQLite 保存任务历史和状态，重启不丢失。

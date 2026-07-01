@@ -15,6 +15,7 @@ pub enum LivePlatform {
     Douyin,
     Twitch,
     Youtube,
+    Kick,
     Unknown,
 }
 
@@ -60,6 +61,9 @@ pub fn detect_platform(url: &str) -> LivePlatform {
     }
     if host.ends_with("youtube.com") || host == "youtu.be" {
         return LivePlatform::Youtube;
+    }
+    if host.ends_with("kick.com") {
+        return LivePlatform::Kick;
     }
 
     LivePlatform::Unknown
@@ -266,6 +270,7 @@ mod tests {
         );
         assert_eq!(detect_platform("https://live.douyin.com/393646574978"), LivePlatform::Douyin);
         assert_eq!(detect_platform("https://www.twitch.tv/seucreysonreborn"), LivePlatform::Twitch);
+        assert_eq!(detect_platform("https://kick.com/topson"), LivePlatform::Kick);
     }
 
     #[test]
@@ -292,6 +297,7 @@ mod tests {
             ("tiktok", "https://www.tiktok.com/@diemhuynh_2003/live", false),
             ("douyin", "https://live.douyin.com/393646574978", true),
             ("twitch", "https://www.twitch.tv/seucreysonreborn", false),
+            ("kick", "https://kick.com/topson", false),
         ];
 
         for (name, original_url, needs_resolve) in cases {
@@ -310,6 +316,18 @@ mod tests {
 
             record_short_segment(name, &resolved).await;
         }
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn kick_live_example_can_record_short_segment() {
+        let resolved = ResolvedStream {
+            input_url: "https://kick.com/topson".to_string(),
+            title: None,
+            direct_input: false,
+        };
+
+        record_short_segment("kick-topson", &resolved).await;
     }
 
     async fn record_short_segment(name: &str, stream: &ResolvedStream) {

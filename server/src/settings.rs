@@ -67,6 +67,7 @@ pub(crate) fn sanitize_recording_settings(
     normalize_quality(&mut settings.quality.douyin);
     normalize_quality(&mut settings.quality.twitch);
     normalize_quality(&mut settings.quality.youtube);
+    normalize_quality(&mut settings.quality.kick);
     normalize_quality(&mut settings.quality.default_quality);
 
     if let Some(size) = settings.segment_size_mb
