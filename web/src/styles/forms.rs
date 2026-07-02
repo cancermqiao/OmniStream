@@ -4,10 +4,10 @@ pub const CSS: &str = r#"
   background: rgba(255, 255, 255, 0.82);
   color: var(--ink);
   border-radius: 999px;
-  padding: 8px 14px;
+  padding: 7px 12px;
   cursor: pointer;
   font-weight: 650;
-  font-size: 12px;
+  font-size: 11px;
   white-space: nowrap;
   transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease, background 0.16s ease;
 }
@@ -49,10 +49,10 @@ pub const CSS: &str = r#"
   width: 100%;
   border: 1px solid var(--line);
   border-radius: 15px;
-  padding: 11px 15px;
+  padding: 10px 14px;
   font: inherit;
   color: inherit;
-  font-size: 13px;
+  font-size: 12px;
   outline: none;
   background: rgba(255, 255, 255, 0.82);
   transition: border-color 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
@@ -84,12 +84,12 @@ textarea.input {
 }
 
 .field { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
-.field label { font-size: 12px; color: #374151; font-weight: 650; }
-.label { color: var(--muted); font-size: 12px; line-height: 1.55; margin: 6px 0 0; }
+.field label { font-size: 11px; color: #374151; font-weight: 650; }
+.label { color: var(--muted); font-size: 11px; line-height: 1.55; margin: 6px 0 0; }
 .section-title {
-  margin: 18px 0 10px;
+  margin: 16px 0 8px;
   color: var(--ink);
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: -0.01em;
 }

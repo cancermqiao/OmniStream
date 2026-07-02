@@ -1,6 +1,4 @@
 pub const CSS: &str = r#"
-@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
-
 * { box-sizing: border-box; }
 html, body {
   width: 100%;
@@ -32,9 +30,9 @@ body {
     radial-gradient(circle at 88% 0%, rgba(52, 199, 89, 0.10), transparent 26%),
     linear-gradient(180deg, #f8fafc 0%, #eef3f8 48%, #f7f8fb 100%);
   color: var(--ink);
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Inter', 'Manrope', sans-serif;
-  font-size: 14px;
-  line-height: 1.45;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Arial, sans-serif;
+  font-size: 13px;
+  line-height: 1.46;
   -webkit-font-smoothing: antialiased;
   text-rendering: geometricPrecision;
 }
@@ -47,7 +45,7 @@ body {
 }
 .layout {
   display: grid;
-  grid-template-columns: 260px minmax(0, 1fr);
+  grid-template-columns: 216px minmax(0, 1fr);
   min-height: 100vh;
   width: 100%;
   max-width: 100vw;
@@ -55,7 +53,7 @@ body {
 }
 
 .layout-collapsed {
-  grid-template-columns: 78px minmax(0, 1fr);
+  grid-template-columns: 68px minmax(0, 1fr);
 }
 
 .sidebar {
@@ -66,7 +64,7 @@ body {
     radial-gradient(circle at 12% 8%, rgba(255, 255, 255, 0.13), transparent 24%),
     linear-gradient(180deg, #050816 0%, #0b1220 52%, #0f172a 100%);
   color: #e5eefc;
-  padding: 24px 16px;
+  padding: 22px 14px;
   border-right: 1px solid rgba(255,255,255,0.10);
   box-shadow: 28px 0 80px rgba(15, 23, 42, 0.16);
   overflow: hidden;
@@ -78,37 +76,37 @@ body {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
-  margin-bottom: 24px;
+  margin-bottom: 22px;
 }
 
 .sidebar-collapsed {
-  padding: 22px 12px;
+  padding: 20px 10px;
 }
 
 .brand {
-  font-weight: 740;
-  font-size: 24px;
-  letter-spacing: -0.045em;
+  font-weight: 720;
+  font-size: 20px;
+  letter-spacing: -0.035em;
   color: #f8fafc;
   white-space: nowrap;
 }
 
 .sidebar-collapsed .brand {
-  width: 32px;
+  width: 30px;
   overflow: hidden;
-  font-size: 21px;
+  font-size: 19px;
 }
 
 .subtitle {
-  margin: 7px 0 28px;
+  margin: 6px 0 24px;
   color: rgba(226, 232, 240, 0.66);
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.5;
 }
 
 .sidebar-toggle {
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   flex: 0 0 auto;
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 999px;
@@ -131,15 +129,15 @@ body {
   border: 0;
   background: transparent;
   color: rgba(226, 232, 240, 0.76);
-  border-radius: 18px;
-  padding: 12px 14px;
+  border-radius: 15px;
+  padding: 10px 12px;
   font-weight: 650;
-  font-size: 13px;
+  font-size: 12px;
   cursor: pointer;
   margin-bottom: 8px;
   display: flex;
   align-items: center;
-  gap: 11px;
+  gap: 9px;
   transition: background 0.18s ease, color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
 }
 
@@ -156,15 +154,15 @@ body {
 }
 
 .tab-icon {
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 10px;
+  border-radius: 9px;
   background: rgba(255, 255, 255, 0.08);
-  font-size: 15px;
+  font-size: 13px;
   line-height: 1;
 }
 
@@ -188,7 +186,7 @@ body {
   min-width: 0;
   width: 100%;
   max-width: 100%;
-  padding: 32px clamp(18px, 2.4vw, 32px) 44px;
+  padding: 26px clamp(14px, 1.8vw, 24px) 40px;
   overflow-x: hidden;
 }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }

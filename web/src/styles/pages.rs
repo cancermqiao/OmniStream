@@ -1,42 +1,42 @@
 pub const CSS: &str = r#"
-.page { display: flex; flex-direction: column; gap: 18px; }
+.page { display: flex; flex-direction: column; gap: 16px; }
 
 .page-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-end;
-  gap: 18px;
-  padding: 2px 0 8px;
+  gap: 16px;
+  padding: 0 0 6px;
   min-width: 0;
 }
 
 .page-header h1 {
   margin: 0;
-  font-size: clamp(30px, 3vw, 44px);
-  line-height: 1.04;
-  letter-spacing: -0.045em;
-  font-weight: 720;
+  font-size: clamp(26px, 2.2vw, 36px);
+  line-height: 1.08;
+  letter-spacing: -0.035em;
+  font-weight: 700;
 }
 
 .page-header p {
-  margin: 12px 0 0;
+  margin: 8px 0 0;
   color: var(--muted);
-  font-size: 14px;
+  font-size: 13px;
   line-height: 1.55;
 }
 
 .stat-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 12px;
+  gap: 10px;
 }
 
 .stat-card {
   background: var(--panel);
   border: 1px solid rgba(255, 255, 255, 0.72);
-  border-radius: var(--radius-lg);
-  padding: 17px 18px;
-  box-shadow: 0 18px 58px rgba(15, 23, 42, 0.07);
+  border-radius: 22px;
+  padding: 15px 16px;
+  box-shadow: 0 14px 42px rgba(15, 23, 42, 0.06);
   backdrop-filter: blur(22px);
   transition: transform 0.18s ease, box-shadow 0.18s ease;
 }
@@ -55,23 +55,23 @@ pub const CSS: &str = r#"
 }
 
 .stat-value {
-  margin: 8px 0 0;
+  margin: 7px 0 0;
   color: var(--ink);
-  font-size: clamp(24px, 2.4vw, 34px);
-  font-weight: 720;
-  letter-spacing: -0.045em;
+  font-size: clamp(22px, 2vw, 30px);
+  font-weight: 700;
+  letter-spacing: -0.035em;
 }
 
 .stat-hint {
-  margin: 6px 0 0;
+  margin: 5px 0 0;
   color: var(--soft);
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .toolbar {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   flex-wrap: wrap;
   min-width: 0;
 }
@@ -83,9 +83,9 @@ pub const CSS: &str = r#"
 }
 
 .toolbar .input {
-  min-width: min(280px, 100%);
-  max-width: min(430px, 100%);
-  flex: 1 1 280px;
+  min-width: min(260px, 100%);
+  max-width: min(390px, 100%);
+  flex: 1 1 260px;
 }
 
 .toolbar-label {

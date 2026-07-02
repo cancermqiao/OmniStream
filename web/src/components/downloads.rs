@@ -118,7 +118,7 @@ pub fn DownloadsPage(
 
             div { class: "card",
                 div { class: "table-wrap",
-                    table { class: "table",
+                    table { class: "table table-downloads",
                         thead {
                             tr {
                                 th { "选择" }

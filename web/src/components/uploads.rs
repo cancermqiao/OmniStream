@@ -107,7 +107,7 @@ pub fn UploadsPage(
 
             div { class: "card",
                 div { class: "table-wrap",
-                    table { class: "table",
+                    table { class: "table table-uploads",
                         thead {
                             tr {
                                 th { "选择" }
@@ -155,7 +155,7 @@ pub fn UploadsPage(
                                             }
                                             td { "{u.name}" }
                                             td { "{account_name}" }
-                                            td {
+                                            td { class: "title-cell",
                                                 if let Some(title) = u.config.title.clone() {
                                                     span { class: "text-ellipsis", title: "{title}", "{title}" }
                                                 } else {
