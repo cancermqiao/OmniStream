@@ -11,30 +11,35 @@ pub const CSS: &str = r#"
 .modal-mask {
   position: absolute;
   inset: 0;
-  background: rgba(15, 23, 42, 0.4);
+  background: rgba(15, 23, 42, 0.34);
+  backdrop-filter: blur(18px);
 }
 
 .modal {
   position: relative;
   width: min(680px, 94vw);
-  background: #fff;
-  border: 1px solid #dbe3ef;
-  border-radius: 10px;
-  padding: 12px;
+  max-height: min(88vh, 900px);
+  overflow: auto;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.78);
+  border-radius: 28px;
+  padding: 20px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
+  box-shadow: 0 34px 120px rgba(15, 23, 42, 0.22);
+  backdrop-filter: blur(24px);
 }
 
 .modal.wide { width: min(820px, 94vw); }
-.modal h3 { margin: 0; font-size: 20px; }
+.modal h3 { margin: 0 0 4px; font-size: 24px; letter-spacing: -0.04em; }
 .section-title {
-  margin: 4px 0 0;
+  margin: 10px 0 0;
   font-size: 12px;
-  font-weight: 700;
-  color: #334155;
+  font-weight: 800;
+  color: var(--ink);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.07em;
 }
 
 .check-grid {
@@ -44,12 +49,13 @@ pub const CSS: &str = r#"
 }
 
 .check-item {
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 10px;
   display: flex;
   align-items: center;
   gap: 8px;
+  background: rgba(255, 255, 255, 0.62);
 }
 
 @media (max-width: 980px) {

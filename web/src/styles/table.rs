@@ -1,10 +1,11 @@
 pub const CSS: &str = r#"
 .card {
-  background: rgba(255, 255, 255, 0.92);
-  border: 1px solid #e2e8f0;
-  border-radius: 14px;
-  padding: 12px;
-  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.06);
+  background: var(--panel-strong);
+  border: 1px solid rgba(255, 255, 255, 0.76);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  box-shadow: var(--shadow-soft);
+  backdrop-filter: blur(24px);
 }
 
 .table-wrap {
@@ -14,26 +15,27 @@ pub const CSS: &str = r#"
 
 .table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   min-width: 760px;
 }
 
 .table th, .table td {
   text-align: left;
-  padding: 7px 8px;
-  border-bottom: 1px solid #eef2f7;
+  padding: 13px 12px;
+  border-bottom: 1px solid rgba(17, 24, 39, 0.06);
   vertical-align: middle;
 }
 
 .table th {
-  color: #64748b;
+  color: var(--muted);
   font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
-  background: #f8fafc;
+  letter-spacing: 0.06em;
+  background: rgba(248, 250, 252, 0.78);
 }
 
-.table tr:hover td { background: #f8fafc; }
+.table tr:hover td { background: rgba(255, 255, 255, 0.74); }
 
 .table .actions {
   width: 440px;
@@ -48,47 +50,48 @@ pub const CSS: &str = r#"
 
 .empty {
   text-align: center;
-  color: #64748b;
-  padding: 20px;
+  color: var(--muted);
+  padding: 30px;
 }
 
 .tag {
   display: inline-block;
   margin: 0 4px 4px 0;
   border-radius: 999px;
-  padding: 2px 7px;
-  background: #f1f5f9;
-  color: #334155;
+  padding: 4px 9px;
+  background: rgba(243, 244, 246, 0.92);
+  color: #374151;
   font-size: 11px;
-  border: 1px solid #e2e8f0;
+  font-weight: 800;
+  border: 1px solid rgba(17, 24, 39, 0.07);
 }
 
 .tag-success {
-  background: #ecfdf5;
+  background: rgba(236, 253, 245, 0.92);
   color: #047857;
-  border-color: #bbf7d0;
+  border-color: rgba(34, 197, 94, 0.22);
 }
 
 .tag-warning {
-  background: #fffbeb;
-  color: #b45309;
-  border-color: #fde68a;
+  background: rgba(255, 251, 235, 0.94);
+  color: #9a5b00;
+  border-color: rgba(245, 158, 11, 0.25);
 }
 
 .tag-danger {
-  background: #fff1f2;
-  color: #be123c;
-  border-color: #fecdd3;
+  background: rgba(255, 241, 242, 0.94);
+  color: #b42318;
+  border-color: rgba(255, 59, 48, 0.25);
 }
 
 .tag-info {
-  background: #eff6ff;
+  background: rgba(239, 246, 255, 0.94);
   color: #1d4ed8;
-  border-color: #bfdbfe;
+  border-color: rgba(0, 122, 255, 0.20);
 }
 
 .muted {
-  color: #94a3b8;
+  color: var(--soft);
   font-size: 12px;
 }
 

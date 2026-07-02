@@ -1,94 +1,111 @@
 pub const CSS: &str = r#"
-.page { display: flex; flex-direction: column; gap: 14px; }
+.page { display: flex; flex-direction: column; gap: 18px; }
 
 .page-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-end;
-  gap: 12px;
-  padding: 4px 0 2px;
+  gap: 18px;
+  padding: 2px 0 8px;
 }
 
 .page-header h1 {
   margin: 0;
-  font-size: 24px;
-  letter-spacing: -0.02em;
+  font-size: clamp(32px, 4vw, 54px);
+  line-height: 0.96;
+  letter-spacing: -0.065em;
+  font-weight: 800;
 }
 
 .page-header p {
-  margin: 4px 0 0;
-  color: #64748b;
-  font-size: 13px;
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.55;
 }
 
 .stat-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
+  gap: 12px;
 }
 
 .stat-card {
-  background: rgba(255, 255, 255, 0.86);
-  border: 1px solid #e2e8f0;
-  border-radius: 14px;
-  padding: 12px;
-  box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+  background: var(--panel);
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  border-radius: var(--radius-lg);
+  padding: 18px;
+  box-shadow: 0 18px 58px rgba(15, 23, 42, 0.07);
+  backdrop-filter: blur(22px);
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.stat-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-soft);
 }
 
 .stat-label {
   margin: 0;
-  color: #64748b;
+  color: var(--muted);
   font-size: 12px;
-  font-weight: 700;
+  font-weight: 800;
+  letter-spacing: 0.02em;
 }
 
 .stat-value {
-  margin: 5px 0 0;
-  color: #0f172a;
-  font-size: 24px;
+  margin: 8px 0 0;
+  color: var(--ink);
+  font-size: clamp(25px, 3vw, 38px);
   font-weight: 800;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.06em;
 }
 
 .stat-hint {
-  margin: 4px 0 0;
-  color: #94a3b8;
-  font-size: 11px;
+  margin: 6px 0 0;
+  color: var(--soft);
+  font-size: 12px;
 }
 
 .toolbar {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   flex-wrap: wrap;
 }
 
 .toolbar + .toolbar {
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px dashed #e2e8f0;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
 }
 
 .toolbar .input {
-  min-width: 260px;
-  max-width: 360px;
+  min-width: 300px;
+  max-width: 430px;
 }
 
 .toolbar-label {
   font-size: 12px;
-  color: #64748b;
-  font-weight: 600;
+  color: var(--muted);
+  font-weight: 800;
 }
 
 .mini-check {
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 4px 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 7px 10px;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   font-size: 12px;
+  background: rgba(255, 255, 255, 0.78);
+  transition: background 0.16s ease, transform 0.16s ease;
+}
+
+.mini-check:hover {
   background: #fff;
+  transform: translateY(-1px);
 }
 
 .qr-card {
@@ -101,32 +118,32 @@ pub const CSS: &str = r#"
   display: flex;
   justify-content: center;
   align-items: center;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
   background: #fff;
-  padding: 10px;
+  padding: 14px;
 }
 
 .qr-box img { width: 240px; height: 240px; }
 .qr-info textarea { width: 100%; min-height: 76px; }
-.qr-info .label { font-size: 12px; color: #64748b; margin: 0; }
-.qr-info .status { margin: 8px 0 0; color: #0f766e; font-size: 13px; }
-.status { margin: 0; color: #0f766e; font-size: 13px; }
-.status-error { color: #be123c; }
+.qr-info .label { font-size: 12px; color: var(--muted); margin: 0; }
+.qr-info .status { margin: 8px 0 0; color: #15803d; font-size: 13px; }
+.status { margin: 0; color: #15803d; font-size: 13px; }
+.status-error { color: var(--danger); }
 
 .status-banner {
-  border: 1px solid #99f6e4;
-  background: #f0fdfa;
-  color: #0f766e;
-  border-radius: 12px;
-  padding: 10px 12px;
-  box-shadow: 0 10px 22px rgba(15, 118, 110, 0.08);
+  border: 1px solid rgba(52, 199, 89, 0.20);
+  background: rgba(240, 253, 244, 0.82);
+  color: #15803d;
+  border-radius: 18px;
+  padding: 12px 14px;
+  box-shadow: 0 14px 34px rgba(21, 128, 61, 0.08);
 }
 
 .status-banner.status-error {
-  border-color: #fecdd3;
-  background: #fff1f2;
-  color: #be123c;
+  border-color: rgba(255, 59, 48, 0.20);
+  background: rgba(255, 241, 242, 0.88);
+  color: #b42318;
 }
 
 .toast-layer {
@@ -145,10 +162,11 @@ pub const CSS: &str = r#"
   margin: 0;
   width: fit-content;
   max-width: min(560px, calc(100vw - 32px));
-  padding: 8px 14px;
+  padding: 10px 16px;
   font-size: 13px;
   font-weight: 700;
   pointer-events: auto;
+  backdrop-filter: blur(18px);
 }
 
 @media (max-width: 980px) {

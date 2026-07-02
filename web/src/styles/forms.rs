@@ -1,21 +1,21 @@
 pub const CSS: &str = r#"
 .btn {
-  border: 1px solid #dbe3ef;
-  background: #fff;
-  color: #0f172a;
-  border-radius: 8px;
-  padding: 6px 10px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.82);
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 8px 13px;
   cursor: pointer;
-  font-weight: 600;
+  font-weight: 800;
   font-size: 12px;
   margin-left: 6px;
   white-space: nowrap;
-  transition: transform 0.14s ease, box-shadow 0.14s ease, border-color 0.14s ease;
+  transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease, background 0.16s ease;
 }
 
 .btn:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+  transform: translateY(-2px);
+  box-shadow: 0 14px 28px rgba(15, 23, 42, 0.10);
 }
 
 .btn:disabled {
@@ -24,46 +24,57 @@ pub const CSS: &str = r#"
 }
 
 .btn-primary {
-  background: #0f766e;
+  background: var(--accent);
   color: #fff;
-  border-color: #0f766e;
+  border-color: var(--accent);
+  box-shadow: 0 12px 26px rgba(0, 122, 255, 0.22);
 }
 
 .btn-warning {
-  background: #fffbeb;
-  color: #b45309;
-  border-color: #fde68a;
+  background: rgba(255, 251, 235, 0.88);
+  color: #9a5b00;
+  border-color: rgba(245, 158, 11, 0.24);
 }
 
 .btn-danger {
-  background: #fff1f2;
-  color: #be123c;
-  border-color: #fecdd3;
+  background: rgba(255, 241, 242, 0.88);
+  color: #b42318;
+  border-color: rgba(255, 59, 48, 0.24);
 }
 
 .btn-ghost {
-  background: #f8fafc;
+  background: rgba(255, 255, 255, 0.58);
 }
 
 .input {
   width: 100%;
-  border: 1px solid #dbe3ef;
-  border-radius: 8px;
-  padding: 7px 9px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 10px 12px;
   font: inherit;
   color: inherit;
   font-size: 13px;
   outline: none;
-  transition: border-color 0.14s ease, box-shadow 0.14s ease;
+  background: rgba(255, 255, 255, 0.82);
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
 }
 
 .input:focus {
-  border-color: #14b8a6;
-  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.13);
+  background: #fff;
+  border-color: rgba(0, 122, 255, 0.64);
+  box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.13);
 }
 
 .field { display: flex; flex-direction: column; gap: 6px; }
-.field label { font-size: 12px; color: #475569; font-weight: 600; }
+.field label { font-size: 12px; color: #374151; font-weight: 800; }
+.label { color: var(--muted); font-size: 12px; line-height: 1.55; margin: 6px 0 0; }
+.section-title {
+  margin: 18px 0 10px;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+}
 
 .grid-2 {
   display: grid;

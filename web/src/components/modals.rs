@@ -236,6 +236,7 @@ pub fn UploadModal(
     let mut description = use_signal(|| template.config.description.clone());
     let mut dynamic = use_signal(|| template.config.dynamic.clone());
     let mut form_error = use_signal::<Option<String>>(|| None);
+    let title_chars = title().chars().count();
 
     rsx! {
         div { class: "modal-wrap",
@@ -270,7 +271,10 @@ pub fn UploadModal(
                     div { class: "field",
                         label { "视频标题模板（必填）" }
                         input { class: "input", value: "{title}", oninput: move |e| title.set(e.value()) }
-                        p { class: "label", "支持占位符：{title}（直播间标题）、%Y-%m-%d、%H:%M。示例：{title} 录播 %Y-%m-%d" }
+                        p {
+                            class: if title_chars > 80 { "label status-error" } else { "label" },
+                            "B 站标题最多 80 字；当前模板 {title_chars} 字。支持占位符：{{title}}（直播间标题）、%Y-%m-%d、%H:%M。"
+                        }
                     }
                     div { class: "field",
                         label { "分区（必填）" }

@@ -2,19 +2,39 @@ pub const CSS: &str = r#"
 @import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap');
 
 * { box-sizing: border-box; }
+:root {
+  color-scheme: light;
+  --ink: #111827;
+  --muted: #6b7280;
+  --soft: #9ca3af;
+  --line: rgba(17, 24, 39, 0.08);
+  --panel: rgba(255, 255, 255, 0.74);
+  --panel-strong: rgba(255, 255, 255, 0.92);
+  --accent: #007aff;
+  --accent-strong: #0066d6;
+  --success: #22c55e;
+  --warning: #f59e0b;
+  --danger: #ff3b30;
+  --radius-lg: 28px;
+  --radius-md: 18px;
+  --shadow-soft: 0 24px 80px rgba(15, 23, 42, 0.10);
+}
+
 body {
   margin: 0;
   background:
-    radial-gradient(circle at top left, rgba(14, 165, 163, 0.13), transparent 30%),
-    linear-gradient(180deg, #f8fbff 0%, #f1f5f9 100%);
-  color: #0f172a;
-  font-family: 'Manrope', sans-serif;
+    radial-gradient(circle at 12% 8%, rgba(0, 122, 255, 0.13), transparent 28%),
+    radial-gradient(circle at 88% 0%, rgba(52, 199, 89, 0.10), transparent 26%),
+    linear-gradient(180deg, #f8fafc 0%, #eef3f8 48%, #f7f8fb 100%);
+  color: var(--ink);
+  font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
 
 .app-shell { min-height: 100vh; }
 .layout {
   display: grid;
-  grid-template-columns: 250px 1fr;
+  grid-template-columns: 280px 1fr;
   min-height: 100vh;
 }
 
@@ -22,23 +42,27 @@ body {
   position: sticky;
   top: 0;
   height: 100vh;
-  background: linear-gradient(180deg, #0f172a 0%, #111827 100%);
-  color: #dbeafe;
-  padding: 24px 14px;
-  border-right: 1px solid rgba(255,255,255,0.08);
-  box-shadow: 16px 0 40px rgba(15, 23, 42, 0.08);
+  background:
+    radial-gradient(circle at 12% 8%, rgba(255, 255, 255, 0.13), transparent 24%),
+    linear-gradient(180deg, #050816 0%, #0b1220 52%, #0f172a 100%);
+  color: #e5eefc;
+  padding: 28px 18px;
+  border-right: 1px solid rgba(255,255,255,0.10);
+  box-shadow: 28px 0 80px rgba(15, 23, 42, 0.16);
 }
 
 .brand {
   font-weight: 800;
-  font-size: 24px;
+  font-size: 28px;
+  letter-spacing: -0.055em;
   color: #f8fafc;
 }
 
 .subtitle {
-  margin: 6px 0 18px;
-  color: #94a3b8;
-  font-size: 12px;
+  margin: 7px 0 28px;
+  color: rgba(226, 232, 240, 0.66);
+  font-size: 13px;
+  line-height: 1.5;
 }
 
 .tab-item {
@@ -46,30 +70,33 @@ body {
   text-align: left;
   border: 0;
   background: transparent;
-  color: #cbd5e1;
-  border-radius: 10px;
-  padding: 11px 12px;
-  font-weight: 600;
+  color: rgba(226, 232, 240, 0.76);
+  border-radius: 18px;
+  padding: 14px 16px;
+  font-weight: 700;
+  font-size: 14px;
   cursor: pointer;
-  margin-bottom: 6px;
-  transition: background 0.16s ease, color 0.16s ease, transform 0.16s ease;
+  margin-bottom: 8px;
+  transition: background 0.18s ease, color 0.18s ease, transform 0.18s ease;
 }
 
 .tab-item:hover {
-  background: rgba(148, 163, 184, 0.18);
-  transform: translateX(2px);
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+  transform: translateX(3px);
 }
 .tab-item-active {
-  background: linear-gradient(135deg, #0f766e, #14b8a6);
+  background: rgba(255, 255, 255, 0.15);
   color: white;
-  box-shadow: 0 10px 24px rgba(20, 184, 166, 0.24);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.14), 0 18px 36px rgba(0, 0, 0, 0.18);
+  backdrop-filter: blur(16px);
 }
 
 .content {
-  width: min(1500px, 100%);
-  padding: 28px;
+  width: min(1640px, 100%);
+  padding: 36px 32px 48px;
 }
-.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
 
 @media (max-width: 980px) {
   .layout { grid-template-columns: 1fr; }
@@ -82,10 +109,11 @@ body {
     gap: 8px;
     align-items: center;
     flex-wrap: wrap;
+    padding: 18px;
   }
   .brand { width: 100%; }
   .subtitle { width: 100%; margin-top: -4px; }
   .tab-item { width: auto; margin-bottom: 0; }
-  .content { padding: 14px; }
+  .content { padding: 18px; }
 }
 "#;

@@ -14,6 +14,8 @@ use std::path::Path;
 pub struct BilibiliUploader;
 
 impl BilibiliUploader {
+    const MAX_TITLE_CHARS: usize = 80;
+
     pub fn new() -> Self {
         Self
     }
@@ -24,6 +26,39 @@ impl BilibiliUploader {
         let merged = template.replace("{title}", placeholder_title);
         // Supports chrono strftime placeholders, e.g. %Y-%m-%d / %H:%M.
         Local::now().format(&merged).to_string()
+    }
+
+    fn normalize_title(raw: String) -> String {
+        let trimmed = raw.trim();
+        let char_count = trimmed.chars().count();
+        if char_count <= Self::MAX_TITLE_CHARS {
+            return trimmed.to_string();
+        }
+
+        let truncated = trimmed.chars().take(Self::MAX_TITLE_CHARS).collect::<String>();
+        tracing::warn!(
+            "Bilibili upload title exceeded {} chars and was truncated: original_chars={}, truncated_title={:?}",
+            Self::MAX_TITLE_CHARS,
+            char_count,
+            truncated
+        );
+        truncated
+    }
+
+    fn resolve_title(
+        config: &UploadConfig,
+        live_title: Option<&str>,
+        task_name: &str,
+        fallback_title: Option<&str>,
+    ) -> String {
+        let raw_title = config
+            .title
+            .as_ref()
+            .map(|t| Self::render_title(t, live_title, task_name))
+            .filter(|t| !t.trim().is_empty())
+            .unwrap_or_else(|| fallback_title.unwrap_or("Uploaded by OmniStream").to_string());
+
+        Self::normalize_title(raw_title)
     }
 
     fn validate_config(config: &UploadConfig) -> Result<()> {
@@ -112,14 +147,7 @@ impl Uploader for BilibiliUploader {
         }
 
         // 3. 提交投稿
-        let title = config
-            .title
-            .as_ref()
-            .map(|t| Self::render_title(t, live_title, task_name).trim().to_string())
-            .filter(|t| !t.is_empty())
-            .unwrap_or_else(|| {
-                videos[0].title.clone().unwrap_or_else(|| "Uploaded by OmniStream".to_string())
-            });
+        let title = Self::resolve_title(config, live_title, task_name, videos[0].title.as_deref());
 
         tracing::info!(
             "Resolved upload title: template={:?}, live_title={:?}, task_name={:?}, final_title={:?}",
@@ -178,5 +206,25 @@ mod tests {
         let rendered = BilibiliUploader::render_title("{title}-%Y", Some("开整"), "任务名");
         assert!(rendered.starts_with("开整-"));
         assert_eq!(rendered.len(), "开整-2026".len());
+    }
+
+    #[test]
+    fn normalize_title_truncates_to_bilibili_limit() {
+        let long_title = "a".repeat(100);
+        let rendered = BilibiliUploader::normalize_title(long_title);
+
+        assert_eq!(rendered.chars().count(), BilibiliUploader::MAX_TITLE_CHARS);
+    }
+
+    #[test]
+    fn resolve_title_truncates_rendered_live_title() {
+        let config = shared::UploadConfig {
+            title: Some("【Arteezy直播录像%Y-%m-%d】{title}".to_string()),
+            ..Default::default()
+        };
+        let live_title = "x".repeat(120);
+        let rendered = BilibiliUploader::resolve_title(&config, Some(&live_title), "Arteezy", None);
+
+        assert_eq!(rendered.chars().count(), BilibiliUploader::MAX_TITLE_CHARS);
     }
 }
