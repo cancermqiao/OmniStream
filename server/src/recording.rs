@@ -12,8 +12,8 @@ use self::segment::{
     SegmentLoopAction, decide_next_segment_action, record_segment, update_recorded_files,
 };
 use self::task_state::{
-    clear_task_handle, finish_recording_without_files, resolve_task_name, set_task_filename,
-    set_task_status,
+    clear_task_handle, finish_recording_without_files, mark_related_errors_completed,
+    resolve_task_name, set_task_filename, set_task_status,
 };
 use crate::{
     state::{RecorderHandle, SharedState},
@@ -134,6 +134,9 @@ pub async fn run_upload(
     }
 
     if update_status {
+        if all_success {
+            mark_related_errors_completed(&state, &task_id).await;
+        }
         set_task_status(&state, &task_id, final_status).await;
         clear_task_handle(&state, &task_id);
     }
