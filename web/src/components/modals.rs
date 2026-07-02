@@ -36,6 +36,14 @@ pub fn DownloadModal(
     let mut q_kick = use_signal(|| base_settings.quality.kick.clone());
     let mut q_default = use_signal(|| base_settings.quality.default_quality.clone());
     let mut form_error = use_signal::<Option<String>>(|| None);
+    let mut upload_search = use_signal(String::new);
+    let upload_query = upload_search().trim().to_lowercase();
+    let visible_uploads = uploads
+        .iter()
+        .filter(|u| upload_query.is_empty() || u.name.to_lowercase().contains(&upload_query))
+        .take(8)
+        .cloned()
+        .collect::<Vec<_>>();
 
     rsx! {
         div { class: "modal-wrap",
@@ -52,17 +60,49 @@ pub fn DownloadModal(
                 }
                 div { class: "field",
                     label { "关联上传任务" }
-                    div { class: "check-grid",
-                        {
-                            uploads.into_iter().map(|u| {
-                                let uid = u.id.clone();
-                                let checked = linked().contains(&uid);
-                                rsx! {
-                                    label { class: "check-item",
-                                        input {
-                                            r#type: "checkbox",
-                                            checked,
-                                            onchange: move |_| {
+                    div { class: "select-panel",
+                        input {
+                            class: "input",
+                            placeholder: "搜索上传任务，点击结果进行关联",
+                            value: "{upload_search}",
+                            oninput: move |e| upload_search.set(e.value()),
+                        }
+                        div { class: "chip-row",
+                            if linked().is_empty() {
+                                span { class: "muted", "未关联上传任务" }
+                            } else {
+                                {
+                                    linked().into_iter().filter_map(|id| {
+                                        uploads.iter().find(|u| u.id == id).map(|u| {
+                                            let uid = u.id.clone();
+                                            rsx! {
+                                                button {
+                                                    class: "chip chip-removable",
+                                                    onclick: move |_| {
+                                                        let mut ids = linked();
+                                                        ids.retain(|v| v != &uid);
+                                                        linked.set(ids);
+                                                    },
+                                                    "{u.name} ×"
+                                                }
+                                            }
+                                        })
+                                    })
+                                }
+                            }
+                        }
+                        div { class: "option-list",
+                            if visible_uploads.is_empty() {
+                                p { class: "empty-option", "没有匹配的上传任务" }
+                            }
+                            {
+                                visible_uploads.into_iter().map(|u| {
+                                    let uid = u.id.clone();
+                                    let selected = linked().contains(&uid);
+                                    rsx! {
+                                        button {
+                                            class: if selected { "option-row option-row-active" } else { "option-row" },
+                                            onclick: move |_| {
                                                 let mut ids = linked();
                                                 if ids.contains(&uid) {
                                                     ids.retain(|v| v != &uid);
@@ -71,11 +111,12 @@ pub fn DownloadModal(
                                                 }
                                                 linked.set(ids);
                                             },
+                                            span { "{u.name}" }
+                                            span { class: "option-state", if selected { "已选择" } else { "添加" } }
                                         }
-                                        span { "{u.name}" }
                                     }
-                                }
-                            })
+                                })
+                            }
                         }
                     }
                 }
@@ -232,7 +273,8 @@ pub fn UploadModal(
     let mut title = use_signal(|| template.config.title.clone().unwrap_or_default());
     let mut tid = use_signal(|| template.config.tid);
     let mut copyright = use_signal(|| template.config.copyright);
-    let mut tags = use_signal(|| template.config.tags.join(","));
+    let mut tags = use_signal(|| template.config.tags.clone());
+    let mut tag_input = use_signal(String::new);
     let mut description = use_signal(|| template.config.description.clone());
     let mut dynamic = use_signal(|| template.config.dynamic.clone());
     let mut form_error = use_signal::<Option<String>>(|| None);
@@ -267,49 +309,91 @@ pub fn UploadModal(
                 }
 
                 p { class: "section-title", "投稿参数" }
-                div { class: "grid-2",
-                    div { class: "field",
-                        label { "视频标题模板（必填）" }
-                        input { class: "input", value: "{title}", oninput: move |e| title.set(e.value()) }
-                        p {
-                            class: if title_chars > 80 { "label status-error" } else { "label" },
-                            "B 站标题最多 80 字；当前模板 {title_chars} 字。支持占位符：{{title}}（直播间标题）、%Y-%m-%d、%H:%M。"
-                        }
+                div { class: "field",
+                    label { "视频标题模板（必填）" }
+                    input { class: "input", value: "{title}", oninput: move |e| title.set(e.value()) }
+                    p {
+                        class: if title_chars > 80 { "label status-error" } else { "label" },
+                        "B 站标题最多 80 字；当前模板 {title_chars} 字。支持占位符：{{title}}（直播间标题）、%Y-%m-%d、%H:%M。"
                     }
-                    div { class: "field",
-                        label { "分区（必填）" }
-                        select {
-                            class: "input",
-                            value: "{tid}",
-                            onchange: move |e| {
-                                if let Ok(v) = e.value().parse::<u16>() {
-                                    tid.set(v);
-                                }
-                            },
-                            for (id, label) in tid_options() {
-                                option { value: "{id}", "{label}" }
+                }
+                div { class: "field",
+                    label { "分区（必填）" }
+                    select {
+                        class: "input",
+                        value: "{tid}",
+                        onchange: move |e| {
+                            if let Ok(v) = e.value().parse::<u16>() {
+                                tid.set(v);
                             }
+                        },
+                        for (id, label) in tid_options() {
+                            option { value: "{id}", "{label}" }
                         }
                     }
                 }
                 div { class: "field",
                     label { "版权" }
-                    select {
-                        class: "input",
-                        value: "{copyright}",
-                        onchange: move |e| {
-                            if let Ok(v) = e.value().parse::<u8>() {
-                                copyright.set(v);
-                            }
-                        },
-                        option { value: "1", "自制" }
-                        option { value: "2", "转载" }
+                    div { class: "segmented",
+                        button {
+                            class: if copyright() == 1 { "segment segment-active" } else { "segment" },
+                            onclick: move |_| copyright.set(1),
+                            "自制"
+                        }
+                        button {
+                            class: if copyright() == 2 { "segment segment-active" } else { "segment" },
+                            onclick: move |_| copyright.set(2),
+                            "转载"
+                        }
                     }
                 }
 
                 div { class: "field",
-                    label { "标签（逗号分隔）" }
-                    input { class: "input", value: "{tags}", oninput: move |e| tags.set(e.value()) }
+                    label { "标签" }
+                    div { class: "tag-editor",
+                        div { class: "chip-row",
+                            if tags().is_empty() {
+                                span { class: "muted", "输入标签后按回车添加" }
+                            } else {
+                                {
+                                    tags().into_iter().map(|tag| {
+                                        let tag_for_remove = tag.clone();
+                                        rsx! {
+                                            button {
+                                                class: "chip chip-removable",
+                                                onclick: move |_| {
+                                                    let mut next = tags();
+                                                    next.retain(|v| v != &tag_for_remove);
+                                                    tags.set(next);
+                                                },
+                                                "{tag} ×"
+                                            }
+                                        }
+                                    })
+                                }
+                            }
+                        }
+                        input {
+                            class: "input",
+                            value: "{tag_input}",
+                            placeholder: "例如 Dota2，输入后按回车",
+                            oninput: move |e| tag_input.set(e.value()),
+                            onkeydown: move |e| {
+                                if e.key().to_string() == "Enter" {
+                                    e.prevent_default();
+                                    let value = tag_input().trim().to_string();
+                                    if !value.is_empty() {
+                                        let mut next = tags();
+                                        if !next.iter().any(|v| v == &value) {
+                                            next.push(value);
+                                        }
+                                        tags.set(next);
+                                        tag_input.set(String::new());
+                                    }
+                                }
+                            },
+                        }
+                    }
                 }
 
                 div { class: "field",
@@ -364,8 +448,20 @@ pub fn UploadModal(
                                 return;
                             }
 
-                            let tag_list = tags()
-                                .split(',')
+                            let mut tag_list = tags();
+                            let pending_tag = tag_input().trim().to_string();
+                            if !pending_tag.is_empty()
+                                && !tag_list.iter().any(|v| v == &pending_tag)
+                            {
+                                tag_list.push(pending_tag);
+                            }
+                            tag_list = tag_list
+                                .into_iter()
+                                .flat_map(|s| {
+                                    s.split(',')
+                                        .map(|part| part.trim().to_string())
+                                        .collect::<Vec<_>>()
+                                })
                                 .map(|s| s.trim().to_string())
                                 .filter(|s| !s.is_empty())
                                 .collect::<Vec<_>>();

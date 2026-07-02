@@ -7,20 +7,21 @@ pub const CSS: &str = r#"
   align-items: flex-end;
   gap: 18px;
   padding: 2px 0 8px;
+  min-width: 0;
 }
 
 .page-header h1 {
   margin: 0;
-  font-size: clamp(32px, 4vw, 54px);
-  line-height: 0.96;
-  letter-spacing: -0.065em;
-  font-weight: 800;
+  font-size: clamp(30px, 3vw, 44px);
+  line-height: 1.04;
+  letter-spacing: -0.045em;
+  font-weight: 720;
 }
 
 .page-header p {
   margin: 12px 0 0;
   color: var(--muted);
-  font-size: 15px;
+  font-size: 14px;
   line-height: 1.55;
 }
 
@@ -34,7 +35,7 @@ pub const CSS: &str = r#"
   background: var(--panel);
   border: 1px solid rgba(255, 255, 255, 0.72);
   border-radius: var(--radius-lg);
-  padding: 18px;
+  padding: 17px 18px;
   box-shadow: 0 18px 58px rgba(15, 23, 42, 0.07);
   backdrop-filter: blur(22px);
   transition: transform 0.18s ease, box-shadow 0.18s ease;
@@ -49,16 +50,16 @@ pub const CSS: &str = r#"
   margin: 0;
   color: var(--muted);
   font-size: 12px;
-  font-weight: 800;
-  letter-spacing: 0.02em;
+  font-weight: 650;
+  letter-spacing: 0.01em;
 }
 
 .stat-value {
   margin: 8px 0 0;
   color: var(--ink);
-  font-size: clamp(25px, 3vw, 38px);
-  font-weight: 800;
-  letter-spacing: -0.06em;
+  font-size: clamp(24px, 2.4vw, 34px);
+  font-weight: 720;
+  letter-spacing: -0.045em;
 }
 
 .stat-hint {
@@ -72,6 +73,7 @@ pub const CSS: &str = r#"
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
+  min-width: 0;
 }
 
 .toolbar + .toolbar {
@@ -81,14 +83,15 @@ pub const CSS: &str = r#"
 }
 
 .toolbar .input {
-  min-width: 300px;
-  max-width: 430px;
+  min-width: min(280px, 100%);
+  max-width: min(430px, 100%);
+  flex: 1 1 280px;
 }
 
 .toolbar-label {
   font-size: 12px;
   color: var(--muted);
-  font-weight: 800;
+  font-weight: 650;
 }
 
 .mini-check {
@@ -99,6 +102,7 @@ pub const CSS: &str = r#"
   align-items: center;
   gap: 8px;
   font-size: 12px;
+  line-height: 1.35;
   background: rgba(255, 255, 255, 0.78);
   transition: background 0.16s ease, transform 0.16s ease;
 }
@@ -173,6 +177,7 @@ pub const CSS: &str = r#"
   .page-header { align-items: flex-start; flex-direction: column; }
   .stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .qr-card { grid-template-columns: 1fr; }
+  .toolbar .input { flex-basis: 100%; }
 }
 
 @media (max-width: 640px) {

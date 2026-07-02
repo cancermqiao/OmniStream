@@ -6,25 +6,30 @@ pub const CSS: &str = r#"
   padding: 16px;
   box-shadow: var(--shadow-soft);
   backdrop-filter: blur(24px);
+  min-width: 0;
 }
 
 .table-wrap {
   width: 100%;
-  overflow-x: auto;
+  max-width: 100%;
+  overflow-x: hidden;
+  min-width: 0;
 }
 
 .table {
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
-  min-width: 760px;
+  min-width: 0;
+  table-layout: fixed;
 }
 
 .table th, .table td {
   text-align: left;
-  padding: 13px 12px;
+  padding: 13px 10px;
   border-bottom: 1px solid rgba(17, 24, 39, 0.06);
   vertical-align: middle;
+  overflow-wrap: anywhere;
 }
 
 .table th {
@@ -38,14 +43,15 @@ pub const CSS: &str = r#"
 .table tr:hover td { background: rgba(255, 255, 255, 0.74); }
 
 .table .actions {
-  width: 440px;
-  min-width: 440px;
+  width: 300px;
+  min-width: 0;
   text-align: right;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .table .actions .btn {
-  margin-bottom: 0;
+  margin: 2px 0 2px 6px;
+  padding: 7px 11px;
 }
 
 .empty {
@@ -62,7 +68,7 @@ pub const CSS: &str = r#"
   background: rgba(243, 244, 246, 0.92);
   color: #374151;
   font-size: 11px;
-  font-weight: 800;
+  font-weight: 650;
   border: 1px solid rgba(17, 24, 39, 0.07);
 }
 
@@ -96,13 +102,15 @@ pub const CSS: &str = r#"
 }
 
 .text-ellipsis {
-  max-width: 280px;
+  max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 @media (max-width: 980px) {
+  .table { table-layout: auto; }
+  .table-wrap { overflow-x: auto; }
   .table .actions { width: auto; }
 }
 "#;

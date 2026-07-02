@@ -1,6 +1,5 @@
 use dioxus::prelude::*;
 use shared::{DownloadConfig, UploadTemplate};
-use std::collections::HashSet;
 
 use crate::api;
 use crate::components::{
@@ -15,6 +14,7 @@ pub fn App() -> Element {
     let api_url = api_url();
 
     let mut active_tab = use_signal(|| Tab::Downloads);
+    let mut sidebar_collapsed = use_signal(|| false);
     let mut data = use_signal(AppData::default);
 
     let mut editing_download = use_signal::<Option<DownloadConfig>>(|| None);
@@ -92,29 +92,49 @@ pub fn App() -> Element {
                 }
             }
 
-            div { class: "layout",
-                aside { class: "sidebar",
-                    div { class: "brand", "OmniStream" }
-                    p { class: "subtitle", "直播录制与上传工作流" }
+            div { class: if sidebar_collapsed() { "layout layout-collapsed" } else { "layout" },
+                aside { class: if sidebar_collapsed() { "sidebar sidebar-collapsed" } else { "sidebar" },
+                    div { class: "sidebar-top",
+                        div {
+                            div { class: "brand", "OmniStream" }
+                            if !sidebar_collapsed() {
+                                p { class: "subtitle", "直播录制与上传工作流" }
+                            }
+                        }
+                        button {
+                            class: "sidebar-toggle",
+                            title: if sidebar_collapsed() { "展开侧边栏" } else { "收起侧边栏" },
+                            onclick: move |_| sidebar_collapsed.set(!sidebar_collapsed()),
+                            if sidebar_collapsed() { ">" } else { "<" }
+                        }
+                    }
 
                     TabItem {
                         active: active_tab() == Tab::Downloads,
                         label: "下载任务",
+                        icon: "↓",
+                        compact: sidebar_collapsed(),
                         onclick: move |_| active_tab.set(Tab::Downloads),
                     }
                     TabItem {
                         active: active_tab() == Tab::Accounts,
                         label: "账号管理",
+                        icon: "◎",
+                        compact: sidebar_collapsed(),
                         onclick: move |_| active_tab.set(Tab::Accounts),
                     }
                     TabItem {
                         active: active_tab() == Tab::Uploads,
                         label: "上传任务",
+                        icon: "↑",
+                        compact: sidebar_collapsed(),
                         onclick: move |_| active_tab.set(Tab::Uploads),
                     }
                     TabItem {
                         active: active_tab() == Tab::Settings,
                         label: "录制设置",
+                        icon: "⚙",
+                        compact: sidebar_collapsed(),
                         onclick: move |_| active_tab.set(Tab::Settings),
                     }
                 }
@@ -162,34 +182,6 @@ pub fn App() -> Element {
                                         operation_error.set(false);
                                     } else {
                                         operation_message.set(Some(format!("部分下载任务删除失败：{}", failed.join("；"))));
-                                        operation_error.set(true);
-                                    }
-                                    if let Some(v) = api::fetch_downloads(api_url).await {
-                                        let mut next = data();
-                                        next.downloads = v;
-                                        data.set(next);
-                                    }
-                                },
-                                on_batch_bind_uploads: move |(download_ids, upload_ids): (Vec<String>, Vec<String>)| async move {
-                                    if download_ids.is_empty() {
-                                        return;
-                                    }
-                                    let target_ids = download_ids.into_iter().collect::<HashSet<_>>();
-                                    let current = data().downloads;
-                                    let mut failed = Vec::new();
-                                    for mut d in current {
-                                        if target_ids.contains(&d.id) {
-                                            d.linked_upload_ids = upload_ids.clone();
-                                            if let Err(e) = api::save_download(api_url, &d).await {
-                                                failed.push(e);
-                                            }
-                                        }
-                                    }
-                                    if failed.is_empty() {
-                                        operation_message.set(Some("批量绑定上传任务完成。".to_string()));
-                                        operation_error.set(false);
-                                    } else {
-                                        operation_message.set(Some(format!("部分下载任务绑定失败：{}", failed.join("；"))));
                                         operation_error.set(true);
                                     }
                                     if let Some(v) = api::fetch_downloads(api_url).await {

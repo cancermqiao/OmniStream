@@ -9,7 +9,6 @@ pub fn DownloadsPage(
     on_edit: EventHandler<DownloadConfig>,
     on_delete: EventHandler<String>,
     on_batch_delete: EventHandler<Vec<String>>,
-    on_batch_bind_uploads: EventHandler<(Vec<String>, Vec<String>)>,
     on_manual_upload: EventHandler<String>,
     on_stop: EventHandler<(String, String)>,
     on_resume: EventHandler<(String, String)>,
@@ -20,7 +19,6 @@ pub fn DownloadsPage(
     let mut search = use_signal(String::new);
     let mut sort_asc = use_signal(|| true);
     let mut selected_ids = use_signal::<Vec<String>>(Vec::new);
-    let mut bind_upload_ids = use_signal::<Vec<String>>(Vec::new);
 
     let total_count = downloads.len();
     let linked_count = downloads.iter().filter(|d| !d.linked_upload_ids.is_empty()).count();
@@ -108,42 +106,6 @@ pub fn DownloadsPage(
                         disabled: selected_ids().is_empty(),
                         onclick: move |_| on_batch_delete.call(selected_ids()),
                         "批量删除"
-                    }
-                }
-                div { class: "toolbar",
-                    span { class: "toolbar-label", "批量绑定上传任务（已选 {selected_ids().len()} 项）" }
-                    {
-                        uploads.iter().map(|u| {
-                            let uid = u.id.clone();
-                            let checked = bind_upload_ids().contains(&uid);
-                            rsx! {
-                                label { class: "mini-check",
-                                    input {
-                                        r#type: "checkbox",
-                                        checked,
-                                        onchange: move |_| {
-                                            let mut ids = bind_upload_ids();
-                                            if ids.contains(&uid) {
-                                                ids.retain(|v| v != &uid);
-                                            } else {
-                                                ids.push(uid.clone());
-                                            }
-                                            bind_upload_ids.set(ids);
-                                        },
-                                    }
-                                    span { "{u.name}" }
-                                }
-                            }
-                        })
-                    }
-                    button {
-                        class: "btn btn-primary",
-                        disabled: selected_ids().is_empty(),
-                        onclick: move |_| {
-                            on_batch_bind_uploads.call((selected_ids(), bind_upload_ids()));
-                            selected_ids.set(vec![]);
-                        },
-                        "应用"
                     }
                 }
                 if let Some(msg) = manual_upload_message.clone() {
