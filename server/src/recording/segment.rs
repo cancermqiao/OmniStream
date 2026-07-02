@@ -1,12 +1,17 @@
-use std::time::Duration;
+use std::{collections::VecDeque, process::Stdio, sync::Arc, time::Duration};
 
+use tokio::io::{AsyncBufReadExt, AsyncRead, BufReader};
 use tokio::process::Command;
+use tokio::sync::Mutex;
 use tokio::time::{Instant, MissedTickBehavior, interval, sleep};
 
 use super::{RecorderRuntimeConfig, prepare_segment_file, resolve_task_name, stop_segment_process};
 use crate::{checker::STREAMLINK_PATH, platform::resolve_stream, state::SharedState};
 
 const FFMPEG_PATH: &str = "ffmpeg";
+const RECORDER_OUTPUT_LINES: usize = 20;
+
+type RecorderOutputBuffer = Arc<Mutex<VecDeque<String>>>;
 
 pub(super) enum SegmentLoopAction {
     Continue,
@@ -94,8 +99,26 @@ pub(super) async fn record_segment(
             };
         }
     };
+    let recorder_output = Arc::new(Mutex::new(VecDeque::with_capacity(RECORDER_OUTPUT_LINES)));
+    spawn_recorder_output_collector(
+        child.stdout.take(),
+        task_id.to_string(),
+        recorder_name,
+        "stdout",
+        false,
+        recorder_output.clone(),
+    );
+    spawn_recorder_output_collector(
+        child.stderr.take(),
+        task_id.to_string(),
+        recorder_name,
+        "stderr",
+        true,
+        recorder_output.clone(),
+    );
 
     let mut limit_reached = false;
+    let mut recorder_error = None;
     let segment_started_at = Instant::now();
     let mut check_interval = interval(Duration::from_secs(1));
     check_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
@@ -104,8 +127,37 @@ pub(super) async fn record_segment(
         tokio::select! {
             status = child.wait() => {
                 match status {
-                    Ok(s) => tracing::info!("Task {} {} segment finished with status: {}", task_id, recorder_name, s),
-                    Err(e) => tracing::error!("Task {} {} segment error: {}", task_id, recorder_name, e),
+                    Ok(s) if s.success() => {
+                        tracing::info!("Task {} {} segment finished with status: {}", task_id, recorder_name, s);
+                    }
+                    Ok(s) => {
+                        let recent_output = recent_recorder_output(&recorder_output).await;
+                        let message = format!(
+                            "{} exited unsuccessfully: status={}, input={}, quality={}, output={}, recent_output={}",
+                            recorder_name,
+                            s,
+                            recorder.input_url(),
+                            recorder.quality_label(),
+                            current_filename,
+                            recent_output.unwrap_or_else(|| "<empty>".to_string())
+                        );
+                        tracing::error!("Task {} {}", task_id, message);
+                        recorder_error = Some(message);
+                    }
+                    Err(e) => {
+                        let recent_output = recent_recorder_output(&recorder_output).await;
+                        let message = format!(
+                            "{} segment wait failed: {}, input={}, quality={}, output={}, recent_output={}",
+                            recorder_name,
+                            e,
+                            recorder.input_url(),
+                            recorder.quality_label(),
+                            current_filename,
+                            recent_output.unwrap_or_else(|| "<empty>".to_string())
+                        );
+                        tracing::error!("Task {} {}", task_id, message);
+                        recorder_error = Some(message);
+                    }
                 }
                 break;
             }
@@ -137,7 +189,16 @@ pub(super) async fn record_segment(
         }
     }
 
-    SegmentRecordResult { filename: current_filename, limit_reached, terminal_error: None }
+    let terminal_error = if !limit_reached
+        && recorder_error.is_some()
+        && !recorded_file_has_content(&current_filename).await
+    {
+        recorder_error
+    } else {
+        None
+    };
+
+    SegmentRecordResult { filename: current_filename, limit_reached, terminal_error }
 }
 
 enum RecorderCommand {
@@ -145,11 +206,28 @@ enum RecorderCommand {
     Ffmpeg { input_url: String },
 }
 
+impl RecorderCommand {
+    fn input_url(&self) -> &str {
+        match self {
+            RecorderCommand::Streamlink { input_url, .. }
+            | RecorderCommand::Ffmpeg { input_url } => input_url,
+        }
+    }
+
+    fn quality_label(&self) -> &str {
+        match self {
+            RecorderCommand::Streamlink { quality, .. } => quality,
+            RecorderCommand::Ffmpeg { .. } => "copy",
+        }
+    }
+}
+
 fn build_recorder_command(recorder: &RecorderCommand, output: &str) -> (Command, &'static str) {
     match recorder {
         RecorderCommand::Streamlink { input_url, quality } => {
             let mut command = Command::new(STREAMLINK_PATH);
             command.arg("-o").arg(output).arg(input_url).arg(quality);
+            command.stdout(Stdio::piped()).stderr(Stdio::piped());
             command.kill_on_drop(true);
             (command, STREAMLINK_PATH)
         }
@@ -177,10 +255,80 @@ fn build_recorder_command(recorder: &RecorderCommand, output: &str) -> (Command,
                 .arg("-f")
                 .arg("mp4")
                 .arg(output);
+            command.stdout(Stdio::piped()).stderr(Stdio::piped());
             command.kill_on_drop(true);
             (command, FFMPEG_PATH)
         }
     }
+}
+
+fn spawn_recorder_output_collector<R>(
+    reader: Option<R>,
+    task_id: String,
+    recorder_name: &'static str,
+    stream_name: &'static str,
+    log_lines: bool,
+    output: RecorderOutputBuffer,
+) where
+    R: AsyncRead + Unpin + Send + 'static,
+{
+    let Some(reader) = reader else {
+        return;
+    };
+
+    tokio::spawn(async move {
+        let mut lines = BufReader::new(reader).lines();
+        loop {
+            match lines.next_line().await {
+                Ok(Some(line)) => {
+                    let trimmed = line.trim().to_string();
+                    if trimmed.is_empty() {
+                        continue;
+                    }
+                    {
+                        let mut output = output.lock().await;
+                        if output.len() == RECORDER_OUTPUT_LINES {
+                            output.pop_front();
+                        }
+                        output.push_back(format!("{stream_name}: {trimmed}"));
+                    }
+                    if log_lines {
+                        tracing::warn!(
+                            "Task {} {} {}: {}",
+                            task_id,
+                            recorder_name,
+                            stream_name,
+                            trimmed
+                        );
+                    }
+                }
+                Ok(None) => break,
+                Err(e) => {
+                    tracing::warn!(
+                        "Task {} failed to read {} {}: {}",
+                        task_id,
+                        recorder_name,
+                        stream_name,
+                        e
+                    );
+                    break;
+                }
+            }
+        }
+    });
+}
+
+async fn recent_recorder_output(output: &RecorderOutputBuffer) -> Option<String> {
+    let output = output.lock().await;
+    if output.is_empty() {
+        None
+    } else {
+        Some(output.iter().cloned().collect::<Vec<_>>().join(" | "))
+    }
+}
+
+async fn recorded_file_has_content(path: &str) -> bool {
+    tokio::fs::metadata(path).await.map(|meta| meta.len() > 0).unwrap_or(false)
 }
 
 pub(super) fn update_recorded_files(
@@ -226,8 +374,17 @@ pub(super) async fn decide_next_segment_action(
             sleep(Duration::from_secs(5)).await;
             SegmentLoopAction::Continue
         }
-        _ => {
-            tracing::info!("Task {} stream ended or check failed, stopping recorder", task_id);
+        Ok(false) => {
+            tracing::info!("Task {} stream ended, stopping recorder", task_id);
+            SegmentLoopAction::Stop
+        }
+        Err(e) => {
+            tracing::error!(
+                "Task {} failed to check live status after recorder exit, url={}: {}",
+                task_id,
+                url,
+                e
+            );
             SegmentLoopAction::Stop
         }
     }

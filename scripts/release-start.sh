@@ -12,7 +12,7 @@ DB_FILE="${BILIUP_DB_PATH:-$ROOT_DIR/data/omnistream.db}"
 COOKIES_DIR="${BILIUP_COOKIES_DIR:-$ROOT_DIR/data/cookies}"
 RECORDINGS_DIR="${BILIUP_RECORDINGS_DIR:-$ROOT_DIR/data/recordings}"
 
-mkdir -p "$PID_DIR" "$(dirname "$DB_FILE")" "$COOKIES_DIR" "$RECORDINGS_DIR"
+mkdir -p "$PID_DIR" "$(dirname "$DB_FILE")" "$COOKIES_DIR" "$RECORDINGS_DIR" logs
 
 ensure_command() {
   if ! command -v "$1" >/dev/null 2>&1; then
@@ -80,3 +80,4 @@ fi
 echo "OmniStream started."
 echo "Web/API: http://127.0.0.1:${API_PORT}"
 echo "Logs:    tail -f server.log"
+echo "Level logs: tail -f logs/info.log logs/warn.log logs/error.log"

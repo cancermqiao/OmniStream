@@ -55,7 +55,12 @@ pub async fn run_upload(
     auto_cleanup_after_upload: bool,
 ) {
     if filenames.is_empty() {
-        tracing::warn!("Task {} has no files to upload", task_id);
+        let message = format!("Task {task_id} has no files to upload");
+        tracing::error!("{}", message);
+        if update_status {
+            set_task_status(&state, &task_id, TaskStatus::Error(message)).await;
+            clear_task_handle(&state, &task_id);
+        }
         return;
     }
     if configs.is_empty() {
@@ -95,7 +100,16 @@ pub async fn run_upload(
         match uploader.upload(filenames.clone(), config, live_title.as_deref(), &task_name).await {
             Ok(_) => tracing::info!("Task {} upload {} completed", task_id, i + 1),
             Err(e) => {
-                tracing::error!("Task {} upload {} failed: {:?}", task_id, i + 1, e);
+                tracing::error!(
+                    "Task {} upload {}/{} failed, task_name={}, files={:?}, title_template={:?}: {:?}",
+                    task_id,
+                    i + 1,
+                    configs.len(),
+                    task_name,
+                    filenames,
+                    config.title,
+                    e
+                );
                 all_success = false;
                 error_msg = format!("Upload {} failed: {:?}", i + 1, e);
             }

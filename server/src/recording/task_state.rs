@@ -52,6 +52,7 @@ pub(super) async fn finish_recording_without_files(
     terminal_error: Option<String>,
 ) {
     let error_message = terminal_error.unwrap_or_else(|| "No files generated".to_string());
+    tracing::error!("Task {} finished without recordable files: {}", task_id, error_message);
     set_task_status(state, task_id, TaskStatus::Error(error_message)).await;
     clear_task_handle(state, task_id);
 }

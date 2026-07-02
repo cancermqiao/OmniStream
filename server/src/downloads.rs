@@ -3,7 +3,7 @@ use axum::{
     extract::{Path, State},
     http::StatusCode,
 };
-use shared::{DownloadConfig, TaskStatus};
+use shared::{DownloadConfig, StreamTask, TaskStatus};
 use uuid::Uuid;
 
 use crate::{
@@ -12,7 +12,7 @@ use crate::{
         resolve_auto_cleanup_after_upload, resolve_manual_upload_configs, scan_recording_files,
     },
     recording, settings,
-    state::SharedState,
+    state::{RecorderHandle, SharedState},
 };
 
 pub async fn list_downloads(
@@ -389,6 +389,12 @@ pub async fn trigger_manual_upload_service(
     );
 
     if files.is_empty() {
+        tracing::warn!(
+            "Manual upload rejected: no recording files, id={}, name={}, dir={}",
+            download.id,
+            download.name,
+            task_dir.display()
+        );
         return Err((
             StatusCode::BAD_REQUEST,
             format!("no recording files found in {}", task_dir.display()),
@@ -409,12 +415,37 @@ pub async fn trigger_manual_upload_service(
     );
 
     let state_for_upload = state.clone();
-    tokio::spawn(async move {
-        recording::run_upload(
+    let manual_task = StreamTask {
+        id: manual_task_id.clone(),
+        name: task_name.clone(),
+        url: download.url.clone(),
+        status: TaskStatus::Uploading,
+        filename: files.first().cloned().unwrap_or_else(|| "manual-upload".to_string()),
+        upload_configs: upload_configs.clone(),
+    };
+    state.tasks.insert(manual_task_id.clone(), manual_task.clone());
+    if let Err(e) = state.db.save_task(&manual_task).await {
+        state.tasks.remove(&manual_task_id);
+        tracing::error!(
+            "Manual upload failed to persist task: manual_task_id={}, download_id={}, name={}: {}",
             manual_task_id,
+            download.id,
+            download.name,
+            e
+        );
+        return Err((
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "failed to create manual upload task".to_string(),
+        ));
+    }
+
+    let task_id_for_upload = manual_task_id.clone();
+    let handle = tokio::spawn(async move {
+        recording::run_upload(
+            task_id_for_upload,
             files,
             state_for_upload,
-            false,
+            true,
             upload_configs,
             live_title,
             task_name,
@@ -422,6 +453,7 @@ pub async fn trigger_manual_upload_service(
         )
         .await;
     });
+    state.handles.insert(manual_task_id, RecorderHandle { abort_handle: handle.abort_handle() });
 
     Ok((StatusCode::ACCEPTED, "manual upload started".to_string()))
 }
@@ -536,6 +568,10 @@ mod tests {
         assert_eq!(status_label_for_tasks(&statuses, false), "下载中");
 
         let statuses = vec![TaskStatus::Stopped, TaskStatus::Uploading];
+        assert_eq!(status_label_for_tasks(&statuses, false), "上传中");
+
+        let statuses =
+            vec![TaskStatus::Error("previous failure".to_string()), TaskStatus::Uploading];
         assert_eq!(status_label_for_tasks(&statuses, false), "上传中");
     }
 
