@@ -6,6 +6,42 @@ TAG="${OMNISTREAM_TAG:-latest}"
 ARCH="${OMNISTREAM_ARCH:-linux-amd64}"
 INSTALL_DIR="${OMNISTREAM_HOME:-$HOME/omnistream}"
 
+configure_logrotate() {
+  if [[ "$(uname -s)" != "Linux" ]]; then
+    echo "Skipping logrotate setup: only supported on Linux."
+    return
+  fi
+
+  if [[ "${EUID:-$(id -u)}" -ne 0 ]]; then
+    echo "Skipping logrotate setup: root privileges are required to write /etc/logrotate.d/omnistream."
+    return
+  fi
+
+  if ! command -v logrotate >/dev/null 2>&1; then
+    echo "Skipping logrotate setup: logrotate is not installed."
+    return
+  fi
+
+  mkdir -p "$INSTALL_DIR/logs"
+  cat >/etc/logrotate.d/omnistream <<EOF
+$INSTALL_DIR/server.log $INSTALL_DIR/logs/*.log {
+    daily
+    rotate 7
+    missingok
+    notifempty
+    compress
+    delaycompress
+    dateext
+    dateformat -%Y%m%d
+    maxsize 100M
+    copytruncate
+    create 0644 root root
+}
+EOF
+  chmod 0644 /etc/logrotate.d/omnistream
+  echo "Configured log rotation: /etc/logrotate.d/omnistream"
+}
+
 usage() {
   cat <<'EOF'
 Usage:
@@ -100,6 +136,7 @@ tar \
   -C "$INSTALL_DIR" \
   --strip-components=1
 chmod +x "$INSTALL_DIR/bin/server" "$INSTALL_DIR/scripts/release-start.sh" "$INSTALL_DIR/scripts/release-stop.sh"
+configure_logrotate
 
 echo "Installed OmniStream to $INSTALL_DIR"
 echo "Preserved data directory: $INSTALL_DIR/data"
