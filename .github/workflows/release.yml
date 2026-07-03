@@ -109,42 +109,12 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Install Dioxus CLI
-        if: matrix.name != 'linux-amd64'
         run: cargo install dioxus-cli --locked
 
-      - name: Build Linux amd64 on manylinux 2.28
-        if: matrix.name == 'linux-amd64'
-        shell: bash
-        run: |
-          set -euo pipefail
-          docker run --rm \
-            -e CARGO_BUILD_JOBS=2 \
-            -e HOST_UID="$(id -u)" \
-            -e HOST_GID="$(id -g)" \
-            -v "$PWD":/work \
-            -w /work \
-            quay.io/pypa/manylinux_2_28_x86_64 \
-            /bin/bash -lc '
-              set -euo pipefail
-              yum install -y curl git openssl-devel pkgconfig
-              curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs \
-                | sh -s -- -y --profile minimal --default-toolchain stable
-              source "$HOME/.cargo/env"
-              rustup target add wasm32-unknown-unknown
-              cargo install dioxus-cli --locked
-              cargo build --release -p server --bin server
-              cd web
-              dx build --platform web --release
-              cd ..
-              chown -R "$HOST_UID:$HOST_GID" target
-            '
-
       - name: Build server binary
-        if: matrix.name != 'linux-amd64'
         run: cargo build --release -p server --bin server
 
       - name: Build Web
-        if: matrix.name != 'linux-amd64'
         working-directory: web
         run: dx build --platform web --release
 
