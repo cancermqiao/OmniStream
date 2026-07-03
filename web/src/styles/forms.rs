@@ -1,13 +1,13 @@
 pub const CSS: &str = r#"
 .btn {
   border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.82);
+  background: rgba(255, 255, 255, 0.76);
   color: var(--ink);
   border-radius: 999px;
-  padding: 7px 12px;
+  padding: 7px 11px;
   cursor: pointer;
-  font-weight: 650;
-  font-size: 11px;
+  font-weight: 700;
+  font-size: 10.5px;
   white-space: nowrap;
   transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease, background 0.16s ease;
 }
@@ -23,10 +23,10 @@ pub const CSS: &str = r#"
 }
 
 .btn-primary {
-  background: var(--accent);
+  background: linear-gradient(180deg, #2477ff 0%, var(--accent-strong) 100%);
   color: #fff;
-  border-color: var(--accent);
-  box-shadow: 0 12px 26px rgba(0, 122, 255, 0.22);
+  border-color: rgba(18, 104, 255, 0.92);
+  box-shadow: 0 12px 26px rgba(18, 104, 255, 0.24);
 }
 
 .btn-warning {
@@ -42,19 +42,19 @@ pub const CSS: &str = r#"
 }
 
 .btn-ghost {
-  background: rgba(255, 255, 255, 0.58);
+  background: rgba(255, 255, 255, 0.54);
 }
 
 .input {
   width: 100%;
   border: 1px solid var(--line);
-  border-radius: 15px;
-  padding: 10px 14px;
+  border-radius: 14px;
+  padding: 9px 13px;
   font: inherit;
   color: inherit;
-  font-size: 12px;
+  font-size: 11.5px;
   outline: none;
-  background: rgba(255, 255, 255, 0.82);
+  background: rgba(255, 255, 255, 0.78);
   transition: border-color 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
 }
 
@@ -79,12 +79,12 @@ textarea.input {
 
 .input:focus {
   background: #fff;
-  border-color: rgba(0, 122, 255, 0.64);
-  box-shadow: 0 0 0 4px rgba(0, 122, 255, 0.13);
+  border-color: rgba(18, 104, 255, 0.58);
+  box-shadow: 0 0 0 4px rgba(18, 104, 255, 0.12);
 }
 
 .field { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
-.field label { font-size: 11px; color: #374151; font-weight: 650; }
+.field label { font-size: 10.5px; color: #374151; font-weight: 700; }
 .label { color: var(--muted); font-size: 11px; line-height: 1.55; margin: 6px 0 0; }
 .section-title {
   margin: 16px 0 8px;
@@ -111,9 +111,9 @@ textarea.input {
 .select-panel,
 .tag-editor {
   border: 1px solid var(--line);
-  border-radius: 20px;
+  border-radius: 18px;
   padding: 10px;
-  background: rgba(255, 255, 255, 0.64);
+  background: rgba(255, 255, 255, 0.58);
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -167,8 +167,8 @@ textarea.input {
 .option-row {
   width: 100%;
   border: 1px solid transparent;
-  border-radius: 14px;
-  padding: 10px 12px;
+  border-radius: 13px;
+  padding: 9px 11px;
   background: transparent;
   color: var(--ink);
   cursor: pointer;
@@ -178,7 +178,7 @@ textarea.input {
   gap: 12px;
   text-align: left;
   font: inherit;
-  font-size: 13px;
+  font-size: 12px;
   transition: background 0.16s ease, border-color 0.16s ease, transform 0.16s ease;
 }
 
@@ -214,19 +214,19 @@ textarea.input {
   padding: 4px;
   border: 1px solid var(--line);
   border-radius: 999px;
-  background: rgba(243, 244, 246, 0.72);
+  background: rgba(235, 241, 250, 0.72);
 }
 
 .segment {
   min-width: 88px;
   border: 0;
   border-radius: 999px;
-  padding: 8px 14px;
+  padding: 7px 13px;
   background: transparent;
   color: var(--muted);
   cursor: pointer;
   font: inherit;
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 650;
   transition: background 0.16s ease, color 0.16s ease, box-shadow 0.16s ease;
 }

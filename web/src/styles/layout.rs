@@ -7,53 +7,55 @@ html, body {
 }
 :root {
   color-scheme: light;
-  --ink: #111827;
-  --muted: #6b7280;
-  --soft: #9ca3af;
-  --line: rgba(17, 24, 39, 0.08);
-  --panel: rgba(255, 255, 255, 0.74);
-  --panel-strong: rgba(255, 255, 255, 0.92);
-  --accent: #007aff;
-  --accent-strong: #0066d6;
+  --ink: #0c1222;
+  --muted: #6a7283;
+  --soft: #9aa4b5;
+  --line: rgba(15, 23, 42, 0.08);
+  --panel: rgba(255, 255, 255, 0.70);
+  --panel-strong: rgba(255, 255, 255, 0.88);
+  --accent: #1268ff;
+  --accent-strong: #0b55dc;
   --success: #22c55e;
   --warning: #f59e0b;
   --danger: #ff3b30;
-  --radius-lg: 28px;
-  --radius-md: 18px;
-  --shadow-soft: 0 24px 80px rgba(15, 23, 42, 0.10);
+  --radius-lg: 24px;
+  --radius-md: 16px;
+  --sidebar-width: 178px;
+  --sidebar-collapsed-width: 60px;
+  --shadow-soft: 0 22px 68px rgba(15, 23, 42, 0.11);
 }
 
 body {
   margin: 0;
   background:
-    radial-gradient(circle at 12% 8%, rgba(0, 122, 255, 0.13), transparent 28%),
-    radial-gradient(circle at 88% 0%, rgba(52, 199, 89, 0.10), transparent 26%),
-    linear-gradient(180deg, #f8fafc 0%, #eef3f8 48%, #f7f8fb 100%);
+    radial-gradient(circle at 8% 0%, rgba(42, 99, 255, 0.15), transparent 26%),
+    radial-gradient(circle at 94% 2%, rgba(91, 210, 186, 0.15), transparent 24%),
+    linear-gradient(135deg, #f5f8ff 0%, #eef3f8 45%, #f8fbff 100%);
   color: var(--ink);
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', 'Helvetica Neue', Arial, sans-serif;
-  font-size: 13px;
-  line-height: 1.46;
+  font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif;
+  font-size: 12px;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   text-rendering: geometricPrecision;
 }
 
 .app-shell {
-  min-height: 100vh;
-  width: 100%;
-  max-width: 100vw;
-  overflow-x: hidden;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
 }
 .layout {
   display: grid;
-  grid-template-columns: 216px minmax(0, 1fr);
-  min-height: 100vh;
-  width: 100%;
+  grid-template-columns: var(--sidebar-width) minmax(0, calc(100vw - var(--sidebar-width)));
+  height: 100vh;
+  width: 100vw;
   max-width: 100vw;
   transition: grid-template-columns 0.22s ease;
+  overflow: hidden;
 }
 
 .layout-collapsed {
-  grid-template-columns: 68px minmax(0, 1fr);
+  grid-template-columns: var(--sidebar-collapsed-width) minmax(0, calc(100vw - var(--sidebar-collapsed-width)));
 }
 
 .sidebar {
@@ -61,12 +63,13 @@ body {
   top: 0;
   height: 100vh;
   background:
-    radial-gradient(circle at 12% 8%, rgba(255, 255, 255, 0.13), transparent 24%),
-    linear-gradient(180deg, #050816 0%, #0b1220 52%, #0f172a 100%);
+    radial-gradient(circle at 16% 0%, rgba(40, 99, 255, 0.28), transparent 25%),
+    radial-gradient(circle at 90% 20%, rgba(70, 219, 190, 0.14), transparent 24%),
+    linear-gradient(180deg, #090d19 0%, #0a1020 56%, #050915 100%);
   color: #e5eefc;
-  padding: 22px 14px;
+  padding: 20px 10px;
   border-right: 1px solid rgba(255,255,255,0.10);
-  box-shadow: 28px 0 80px rgba(15, 23, 42, 0.16);
+  box-shadow: 18px 0 70px rgba(7, 14, 29, 0.22);
   overflow: hidden;
   transition: padding 0.22s ease;
 }
@@ -75,18 +78,18 @@ body {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 22px;
+  gap: 8px;
+  margin-bottom: 24px;
 }
 
 .sidebar-collapsed {
-  padding: 20px 10px;
+  padding: 18px 8px;
 }
 
 .brand {
-  font-weight: 720;
-  font-size: 20px;
-  letter-spacing: -0.035em;
+  font-weight: 760;
+  font-size: 17px;
+  letter-spacing: -0.045em;
   color: #f8fafc;
   white-space: nowrap;
 }
@@ -98,15 +101,15 @@ body {
 }
 
 .subtitle {
-  margin: 6px 0 24px;
-  color: rgba(226, 232, 240, 0.66);
-  font-size: 12px;
-  line-height: 1.5;
+  margin: 6px 0 20px;
+  color: rgba(226, 232, 240, 0.58);
+  font-size: 10px;
+  line-height: 1.45;
 }
 
 .sidebar-toggle {
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   flex: 0 0 auto;
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 999px;
@@ -129,12 +132,12 @@ body {
   border: 0;
   background: transparent;
   color: rgba(226, 232, 240, 0.76);
-  border-radius: 15px;
-  padding: 10px 12px;
-  font-weight: 650;
-  font-size: 12px;
+  border-radius: 14px;
+  padding: 10px 10px;
+  font-weight: 680;
+  font-size: 11px;
   cursor: pointer;
-  margin-bottom: 8px;
+  margin-bottom: 7px;
   display: flex;
   align-items: center;
   gap: 9px;
@@ -147,9 +150,9 @@ body {
   transform: translateX(3px);
 }
 .tab-item-active {
-  background: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.14);
   color: white;
-  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.14), 0 18px 36px rgba(0, 0, 0, 0.18);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.14), 0 16px 34px rgba(0, 0, 0, 0.18);
   backdrop-filter: blur(16px);
 }
 
@@ -184,12 +187,14 @@ body {
 
 .content {
   min-width: 0;
-  width: 100%;
+  width: auto;
   max-width: 100%;
-  padding: 26px clamp(14px, 1.8vw, 24px) 40px;
+  height: 100vh;
+  padding: 22px clamp(12px, 1.4vw, 20px) 32px;
+  overflow-y: auto;
   overflow-x: hidden;
 }
-.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; }
 
 @media (max-width: 980px) {
   .layout,

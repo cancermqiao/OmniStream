@@ -1,18 +1,19 @@
 pub const CSS: &str = r#"
 .card {
   background: var(--panel-strong);
-  border: 1px solid rgba(255, 255, 255, 0.76);
-  border-radius: 24px;
-  padding: 14px;
-  box-shadow: 0 18px 54px rgba(15, 23, 42, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.80);
+  border-radius: 22px;
+  padding: 12px;
+  box-shadow: 0 16px 46px rgba(15, 23, 42, 0.075);
   backdrop-filter: blur(24px);
   min-width: 0;
+  max-width: 100%;
 }
 
 .table-wrap {
   width: 100%;
   max-width: 100%;
-  overflow-x: hidden;
+  overflow-x: clip;
   min-width: 0;
 }
 
@@ -26,10 +27,11 @@ pub const CSS: &str = r#"
 
 .table th, .table td {
   text-align: left;
-  padding: 12px 9px;
+  padding: 11px 8px;
   border-bottom: 1px solid rgba(17, 24, 39, 0.06);
   vertical-align: middle;
   min-width: 0;
+  overflow: hidden;
 }
 
 .table th {
@@ -43,42 +45,44 @@ pub const CSS: &str = r#"
 .table tr:hover td { background: rgba(255, 255, 255, 0.74); }
 
 .table-downloads th:nth-child(1),
-.table-downloads td:nth-child(1) { width: 48px; }
+.table-downloads td:nth-child(1) { width: 42px; }
 .table-downloads th:nth-child(2),
-.table-downloads td:nth-child(2) { width: 16%; }
+.table-downloads td:nth-child(2) { width: 15%; }
 .table-downloads th:nth-child(3),
-.table-downloads td:nth-child(3) { width: 25%; }
+.table-downloads td:nth-child(3) { width: 23%; }
 .table-downloads th:nth-child(4),
-.table-downloads td:nth-child(4) { width: 12%; }
+.table-downloads td:nth-child(4) { width: 10%; }
 .table-downloads th:nth-child(5),
-.table-downloads td:nth-child(5) { width: 18%; }
+.table-downloads td:nth-child(5) { width: 14%; }
 
 .table-uploads th:nth-child(1),
-.table-uploads td:nth-child(1) { width: 46px; }
+.table-uploads td:nth-child(1) { width: 42px; }
 .table-uploads th:nth-child(2),
 .table-uploads td:nth-child(2) { width: 12%; }
 .table-uploads th:nth-child(3),
-.table-uploads td:nth-child(3) { width: 12%; }
+.table-uploads td:nth-child(3) { width: 11%; }
 .table-uploads th:nth-child(4),
-.table-uploads td:nth-child(4) { width: 24%; }
+.table-uploads td:nth-child(4) { width: 23%; }
 .table-uploads th:nth-child(5),
-.table-uploads td:nth-child(5) { width: 10%; }
+.table-uploads td:nth-child(5) { width: 9%; }
 .table-uploads th:nth-child(6),
-.table-uploads td:nth-child(6) { width: 12%; }
+.table-uploads td:nth-child(6) { width: 11%; }
 .table-uploads th:nth-child(7),
-.table-uploads td:nth-child(7) { width: 16%; }
+.table-uploads td:nth-child(7) { width: 13%; }
 
 .table .actions {
-  width: 240px;
+  width: 182px;
   min-width: 0;
   text-align: right;
   white-space: normal;
+  overflow: visible;
 }
 
 .table .actions .btn {
-  margin: 2px 0 2px 4px;
-  padding: 6px 9px;
-  font-size: 11px;
+  margin: 2px 0 2px 3px;
+  padding: 5px 7px;
+  font-size: 10px;
+  line-height: 1.25;
 }
 
 .empty {
@@ -89,9 +93,9 @@ pub const CSS: &str = r#"
 
 .tag {
   display: inline-block;
-  margin: 0 4px 4px 0;
+  margin: 0 3px 4px 0;
   border-radius: 999px;
-  padding: 3px 8px;
+  padding: 3px 7px;
   background: rgba(243, 244, 246, 0.92);
   color: #374151;
   font-size: 11px;
@@ -139,6 +143,10 @@ pub const CSS: &str = r#"
 
 .title-cell {
   overflow: hidden;
+}
+
+.table td:not(.actions):not(.title-cell) {
+  text-overflow: ellipsis;
 }
 
 @media (max-width: 980px) {

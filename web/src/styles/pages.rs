@@ -1,44 +1,56 @@
 pub const CSS: &str = r#"
-.page { display: flex; flex-direction: column; gap: 16px; }
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
 
 .page-header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-end;
-  gap: 16px;
-  padding: 0 0 6px;
+  align-items: center;
+  gap: 12px;
+  padding: 0 0 4px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.page-header > div {
   min-width: 0;
 }
 
 .page-header h1 {
   margin: 0;
-  font-size: clamp(26px, 2.2vw, 36px);
+  font-size: clamp(22px, 1.8vw, 30px);
   line-height: 1.08;
-  letter-spacing: -0.035em;
-  font-weight: 700;
+  letter-spacing: -0.045em;
+  font-weight: 760;
 }
 
 .page-header p {
-  margin: 8px 0 0;
+  margin: 6px 0 0;
   color: var(--muted);
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.55;
 }
 
 .stat-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
+  gap: 8px;
+  min-width: 0;
 }
 
 .stat-card {
   background: var(--panel);
-  border: 1px solid rgba(255, 255, 255, 0.72);
-  border-radius: 22px;
-  padding: 15px 16px;
-  box-shadow: 0 14px 42px rgba(15, 23, 42, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.78);
+  border-radius: 20px;
+  padding: 13px 14px;
+  box-shadow: 0 12px 36px rgba(15, 23, 42, 0.06);
   backdrop-filter: blur(22px);
   transition: transform 0.18s ease, box-shadow 0.18s ease;
+  min-width: 0;
 }
 
 .stat-card:hover {
@@ -49,17 +61,17 @@ pub const CSS: &str = r#"
 .stat-label {
   margin: 0;
   color: var(--muted);
-  font-size: 12px;
-  font-weight: 650;
+  font-size: 11px;
+  font-weight: 680;
   letter-spacing: 0.01em;
 }
 
 .stat-value {
-  margin: 7px 0 0;
+  margin: 6px 0 0;
   color: var(--ink);
-  font-size: clamp(22px, 2vw, 30px);
-  font-weight: 700;
-  letter-spacing: -0.035em;
+  font-size: clamp(20px, 1.55vw, 26px);
+  font-weight: 760;
+  letter-spacing: -0.045em;
 }
 
 .stat-hint {
@@ -71,9 +83,10 @@ pub const CSS: &str = r#"
 .toolbar {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 7px;
   flex-wrap: wrap;
   min-width: 0;
+  max-width: 100%;
 }
 
 .toolbar + .toolbar {
@@ -83,9 +96,9 @@ pub const CSS: &str = r#"
 }
 
 .toolbar .input {
-  min-width: min(260px, 100%);
-  max-width: min(390px, 100%);
-  flex: 1 1 260px;
+  min-width: min(220px, 100%);
+  max-width: min(340px, 100%);
+  flex: 1 1 220px;
 }
 
 .toolbar-label {
