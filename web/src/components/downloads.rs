@@ -171,7 +171,9 @@ pub fn DownloadsPage(
                                                 }
                                             }
                                             td { "{d.name}" }
-                                            td { class: "mono text-ellipsis", title: "{d.url}", "{d.url}" }
+                                            td { class: "url-cell",
+                                                span { class: "mono text-ellipsis", title: "{d.url}", "{d.url}" }
+                                            }
                                             td {
                                                 span { class: "{status_class}", "{status_label}" }
                                             }

@@ -47,13 +47,13 @@ pub const CSS: &str = r#"
 .table-downloads th:nth-child(1),
 .table-downloads td:nth-child(1) { width: 42px; }
 .table-downloads th:nth-child(2),
-.table-downloads td:nth-child(2) { width: 15%; }
+.table-downloads td:nth-child(2) { width: 13%; }
 .table-downloads th:nth-child(3),
-.table-downloads td:nth-child(3) { width: 23%; }
+.table-downloads td:nth-child(3) { width: 32%; }
 .table-downloads th:nth-child(4),
 .table-downloads td:nth-child(4) { width: 10%; }
 .table-downloads th:nth-child(5),
-.table-downloads td:nth-child(5) { width: 14%; }
+.table-downloads td:nth-child(5) { width: 12%; }
 
 .table-uploads th:nth-child(1),
 .table-uploads td:nth-child(1) { width: 42px; }
@@ -142,6 +142,10 @@ pub const CSS: &str = r#"
 }
 
 .title-cell {
+  overflow: hidden;
+}
+
+.url-cell {
   overflow: hidden;
 }
 
