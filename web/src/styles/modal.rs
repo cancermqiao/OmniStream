@@ -78,4 +78,42 @@ pub const CSS: &str = r#"
     padding: 20px;
   }
 }
+
+@media (max-width: 640px) {
+  .modal-wrap {
+    align-items: flex-end;
+    padding: calc(10px + env(safe-area-inset-top)) 10px calc(10px + env(safe-area-inset-bottom));
+    overflow: hidden;
+  }
+
+  .modal,
+  .modal.wide {
+    width: 100%;
+    max-height: calc(100dvh - 20px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    border-radius: 22px;
+    padding: 17px 16px 18px;
+    gap: 12px;
+  }
+
+  .modal h3 {
+    font-size: 20px;
+  }
+
+  .section-title {
+    font-size: 11px;
+    letter-spacing: 0.05em;
+  }
+
+  .check-item {
+    min-height: 42px;
+    border-radius: 14px;
+  }
+}
+
+@media (max-width: 380px) {
+  .modal,
+  .modal.wide {
+    padding: 15px 13px 16px;
+  }
+}
 "#;

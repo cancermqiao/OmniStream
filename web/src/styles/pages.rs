@@ -196,4 +196,80 @@ pub const CSS: &str = r#"
 @media (max-width: 640px) {
   .stat-grid { grid-template-columns: 1fr; }
 }
+
+@media (max-width: 480px) {
+  .page {
+    gap: 11px;
+  }
+
+  .page-header {
+    gap: 9px;
+    padding-bottom: 0;
+  }
+
+  .page-header h1 {
+    font-size: 21px;
+    line-height: 1.12;
+  }
+
+  .page-header p {
+    margin-top: 4px;
+    font-size: 12px;
+  }
+
+  .page-header .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .stat-grid {
+    gap: 7px;
+  }
+
+  .stat-card {
+    border-radius: 18px;
+    padding: 11px 12px;
+  }
+
+  .stat-card:hover {
+    transform: none;
+  }
+
+  .stat-value {
+    font-size: 22px;
+  }
+
+  .toolbar {
+    gap: 8px;
+  }
+
+  .toolbar .input,
+  .toolbar .btn {
+    flex: 1 1 100%;
+    max-width: 100%;
+  }
+
+  .mini-check {
+    width: 100%;
+    justify-content: flex-start;
+    border-radius: 14px;
+  }
+
+  .qr-box img {
+    width: min(240px, 72vw);
+    height: min(240px, 72vw);
+  }
+
+  .toast-layer {
+    top: calc(10px + env(safe-area-inset-top));
+    padding: 0 12px;
+  }
+
+  .toast {
+    width: 100%;
+    max-width: 100%;
+    padding: 10px 12px;
+    border-radius: 16px;
+  }
+}
 "#;

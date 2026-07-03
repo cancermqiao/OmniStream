@@ -80,6 +80,7 @@ pub fn App() -> Element {
     let snapshot = data();
 
     rsx! {
+        document::Meta { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" }
         document::Link { rel: "icon", href: "/assets/favicon.svg", r#type: "image/svg+xml" }
         div { class: "app-shell",
             style { "{theme_css()}" }

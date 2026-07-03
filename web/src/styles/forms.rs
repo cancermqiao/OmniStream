@@ -240,4 +240,92 @@ textarea.input {
 @media (max-width: 980px) {
   .grid-2 { grid-template-columns: 1fr; }
 }
+
+@media (max-width: 640px) {
+  .btn {
+    min-height: 36px;
+    padding: 8px 12px;
+    font-size: 12px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .btn:hover:not(:disabled) {
+    transform: none;
+  }
+
+  .input {
+    min-height: 40px;
+    border-radius: 13px;
+    padding: 10px 12px;
+    font-size: 16px;
+  }
+
+  textarea.input {
+    min-height: 110px;
+  }
+
+  .field {
+    gap: 6px;
+  }
+
+  .field label {
+    font-size: 12px;
+  }
+
+  .label {
+    font-size: 12px;
+  }
+
+  .inline-actions {
+    justify-content: stretch;
+  }
+
+  .inline-actions .btn {
+    flex: 1 1 auto;
+  }
+
+  .select-panel,
+  .tag-editor {
+    border-radius: 16px;
+    padding: 9px;
+  }
+
+  .option-list {
+    max-height: 240px;
+  }
+
+  .option-row {
+    min-height: 42px;
+    padding: 10px;
+    font-size: 13px;
+  }
+
+  .segmented {
+    display: flex;
+    width: 100%;
+    border-radius: 16px;
+  }
+
+  .segment {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 9px 10px;
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .inline-actions .btn {
+    flex-basis: 100%;
+  }
+
+  .chip {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 11.5px;
+  }
+}
 "#;

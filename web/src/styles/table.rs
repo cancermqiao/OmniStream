@@ -158,4 +158,73 @@ pub const CSS: &str = r#"
   .table-wrap { overflow-x: auto; }
   .table .actions { width: auto; }
 }
+
+@media (max-width: 640px) {
+  .card {
+    border-radius: 18px;
+    padding: 8px;
+  }
+
+  .table-wrap {
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    border-radius: 14px;
+  }
+
+  .table {
+    min-width: 720px;
+    font-size: 12px;
+  }
+
+  .table-downloads {
+    min-width: 760px;
+  }
+
+  .table-uploads {
+    min-width: 860px;
+  }
+
+  .table th,
+  .table td {
+    padding: 9px 7px;
+  }
+
+  .table th {
+    font-size: 9.5px;
+    letter-spacing: 0.04em;
+  }
+
+  .table .actions {
+    min-width: 136px;
+    text-align: left;
+  }
+
+  .table .actions .btn {
+    margin: 2px 3px 2px 0;
+    padding: 6px 8px;
+    font-size: 10.5px;
+    min-height: 30px;
+  }
+
+  .tag {
+    padding: 4px 7px;
+    font-size: 10.5px;
+  }
+
+  .empty {
+    padding: 22px 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .table-wrap::after {
+    content: "左右滑动查看更多";
+    display: block;
+    margin: 8px 2px 0;
+    color: var(--soft);
+    font-size: 11px;
+    text-align: center;
+  }
+}
 "#;
