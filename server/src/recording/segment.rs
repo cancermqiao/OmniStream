@@ -244,6 +244,8 @@ fn build_recorder_command(recorder: &RecorderCommand, output: &str) -> (Command,
                 .arg("1")
                 .arg("-reconnect_delay_max")
                 .arg("5")
+                .arg("-headers")
+                .arg(ffmpeg_headers_for_input(input_url))
                 .arg("-i")
                 .arg(input_url)
                 .arg("-c")
@@ -260,6 +262,21 @@ fn build_recorder_command(recorder: &RecorderCommand, output: &str) -> (Command,
             (command, FFMPEG_PATH)
         }
     }
+}
+
+fn ffmpeg_headers_for_input(input_url: &str) -> &'static str {
+    if is_bilibili_cdn_url(input_url) {
+        "Referer: https://live.bilibili.com/\r\nUser-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36\r\n"
+    } else {
+        "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36\r\n"
+    }
+}
+
+fn is_bilibili_cdn_url(input_url: &str) -> bool {
+    input_url.contains("bilivideo.com")
+        || input_url.contains("bilivideo.cn")
+        || input_url.contains("bilibili.com")
+        || input_url.contains("biliapi.net")
 }
 
 fn spawn_recorder_output_collector<R>(
@@ -387,5 +404,27 @@ pub(super) async fn decide_next_segment_action(
             );
             SegmentLoopAction::Stop
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ffmpeg_headers_for_input, is_bilibili_cdn_url};
+
+    #[test]
+    fn ffmpeg_headers_include_bilibili_referer_for_bilibili_cdn() {
+        let headers = ffmpeg_headers_for_input("https://d1--ov-gotcha05.bilivideo.com/live.flv");
+
+        assert!(is_bilibili_cdn_url("https://d1--ov-gotcha05.bilivideo.com/live.flv"));
+        assert!(headers.contains("Referer: https://live.bilibili.com/"));
+        assert!(headers.contains("User-Agent: Mozilla/5.0"));
+    }
+
+    #[test]
+    fn ffmpeg_headers_keep_generic_user_agent_for_other_inputs() {
+        let headers = ffmpeg_headers_for_input("https://example.com/live.m3u8");
+
+        assert!(!headers.contains("Referer: https://live.bilibili.com/"));
+        assert!(headers.contains("User-Agent: Mozilla/5.0"));
     }
 }
