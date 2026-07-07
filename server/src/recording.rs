@@ -311,6 +311,7 @@ mod tests {
             default_quality: "default".to_string(),
         };
 
+        assert_eq!(quality_for_url("https://live.bilibili.com/6", &quality), "bili");
         assert_eq!(quality_for_url("https://www.douyu.com/74960", &quality), "douyu");
         assert_eq!(
             quality_for_url("https://www.tiktok.com/@diemhuynh_2003/live", &quality),

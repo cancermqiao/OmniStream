@@ -116,7 +116,7 @@ async fn check_live_with_platform_resolver(url: &str, source_error: anyhow::Erro
 
 async fn fetch_platform_live_title(url: &str) -> Option<String> {
     match detect_platform(url) {
-        LivePlatform::Douyu | LivePlatform::Douyin => {
+        LivePlatform::Bilibili | LivePlatform::Douyu | LivePlatform::Douyin => {
             if let Ok(Some(stream)) = resolve_stream(url, "best").await
                 && stream.title.is_some()
             {

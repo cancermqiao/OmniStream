@@ -28,6 +28,7 @@ pub struct ResolvedStream {
 
 pub async fn resolve_stream(url: &str, quality: &str) -> Result<Option<ResolvedStream>> {
     match detect_platform(url) {
+        LivePlatform::Bilibili => resolve_bilibili(url, quality).await,
         LivePlatform::Douyu => resolve_douyu(url).await.map(Some),
         LivePlatform::Douyin => resolve_douyin(url, quality).await.map(Some),
         _ => Ok(None),
@@ -67,6 +68,166 @@ pub fn detect_platform(url: &str) -> LivePlatform {
     }
 
     LivePlatform::Unknown
+}
+
+async fn resolve_bilibili(url: &str, quality: &str) -> Result<Option<ResolvedStream>> {
+    let room_id = extract_bilibili_room_id(url).await?;
+    let client = bilibili_http_client()?;
+
+    let room_init: Value = client
+        .get(format!("https://api.live.bilibili.com/room/v1/Room/room_init?id={room_id}"))
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+    ensure_bilibili_api_ok(&room_init, "room_init")?;
+
+    let Some(room_data) = room_init.get("data") else {
+        return Err(anyhow!("Bilibili room_init API missing data: {room_init}"));
+    };
+    if room_data.get("live_status").and_then(Value::as_i64) != Some(1) {
+        return Ok(None);
+    }
+    let canonical_room_id = room_data
+        .get("room_id")
+        .and_then(Value::as_i64)
+        .map(|v| v.to_string())
+        .filter(|v| !v.is_empty())
+        .unwrap_or(room_id);
+
+    let title = fetch_bilibili_title(&client, &canonical_room_id).await;
+    let play_info = fetch_bilibili_play_info(&client, &canonical_room_id, quality).await?;
+    let input_url = select_bilibili_stream_url(&play_info)
+        .ok_or_else(|| anyhow!("Bilibili play info does not contain playable stream URL"))?;
+
+    Ok(Some(ResolvedStream { input_url, title, direct_input: true }))
+}
+
+fn bilibili_http_client() -> Result<Client> {
+    Ok(Client::builder()
+        .user_agent(
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 \
+             (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36",
+        )
+        .build()?)
+}
+
+async fn extract_bilibili_room_id(url: &str) -> Result<String> {
+    if let Some(room_id) = parse_bilibili_room_id_from_url(url) {
+        return Ok(room_id);
+    }
+
+    let response = bilibili_http_client()?.get(url).send().await?.error_for_status()?;
+    if let Some(room_id) = parse_bilibili_room_id_from_url(response.url().as_str()) {
+        return Ok(room_id);
+    }
+    let html = response.text().await?;
+
+    let patterns = [
+        r#""room_id"\s*:\s*(\d+)"#,
+        r#""roomId"\s*:\s*(\d+)"#,
+        r#"room_id=(\d+)"#,
+        r#"live\.bilibili\.com/(\d+)"#,
+    ];
+    patterns
+        .iter()
+        .filter_map(|pattern| Regex::new(pattern).ok())
+        .find_map(|regex| regex.captures(&html))
+        .and_then(|captures| captures.get(1).map(|v| v.as_str().to_string()))
+        .ok_or_else(|| anyhow!("Bilibili room id not found in URL or page HTML"))
+}
+
+fn parse_bilibili_room_id_from_url(raw_url: &str) -> Option<String> {
+    let url = Url::parse(raw_url).ok()?;
+    let host = url.host_str()?.to_ascii_lowercase();
+    if !(host == "b23.tv" || host.ends_with("bilibili.com")) {
+        return None;
+    }
+
+    let mut segments = url.path_segments()?;
+    if host.starts_with("live.") || url.path().contains("/live/") {
+        return segments
+            .find(|segment| segment.chars().all(|c| c.is_ascii_digit()))
+            .map(str::to_string);
+    }
+    segments.find(|segment| segment.chars().all(|c| c.is_ascii_digit())).map(str::to_string)
+}
+
+async fn fetch_bilibili_title(client: &Client, room_id: &str) -> Option<String> {
+    let response: Value = client
+        .get(format!("https://api.live.bilibili.com/room/v1/Room/get_info?room_id={room_id}"))
+        .send()
+        .await
+        .ok()?
+        .error_for_status()
+        .ok()?
+        .json()
+        .await
+        .ok()?;
+    if ensure_bilibili_api_ok(&response, "get_info").is_err() {
+        return None;
+    }
+    non_empty_json_string(&response, &["data", "title"])
+}
+
+async fn fetch_bilibili_play_info(client: &Client, room_id: &str, quality: &str) -> Result<Value> {
+    let qn = bilibili_quality_qn(quality);
+    let response: Value = client
+        .get(format!(
+            "https://api.live.bilibili.com/xlive/web-room/v2/index/getRoomPlayInfo?room_id={room_id}&protocol=0,1&format=0,1,2&codec=0,1&qn={qn}&platform=web&ptype=8"
+        ))
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+    ensure_bilibili_api_ok(&response, "getRoomPlayInfo")?;
+    Ok(response)
+}
+
+fn ensure_bilibili_api_ok(value: &Value, api: &str) -> Result<()> {
+    if value.get("code").and_then(Value::as_i64) == Some(0) {
+        return Ok(());
+    }
+    Err(anyhow!("Bilibili {api} API failed: {value}"))
+}
+
+fn bilibili_quality_qn(quality: &str) -> &'static str {
+    match quality.to_ascii_lowercase().as_str() {
+        "4k" | "2160p" => "20000",
+        "best" | "origin" | "source" | "原画" => "10000",
+        "1080p" | "1080p60" | "bluray" | "蓝光" => "400",
+        "720p" | "720p60" | "hd" => "250",
+        "480p" | "sd" => "150",
+        "360p" | "worst" => "80",
+        _ => "10000",
+    }
+}
+
+fn select_bilibili_stream_url(value: &Value) -> Option<String> {
+    let streams =
+        value.get("data")?.get("playurl_info")?.get("playurl")?.get("stream")?.as_array()?;
+
+    for stream in streams {
+        let formats = stream.get("format")?.as_array()?;
+        for format in formats {
+            let codecs = format.get("codec")?.as_array()?;
+            for codec in codecs {
+                let base_url = codec.get("base_url").and_then(Value::as_str)?;
+                let url_infos = codec.get("url_info")?.as_array()?;
+                for url_info in url_infos {
+                    let host = url_info.get("host").and_then(Value::as_str)?;
+                    let extra = url_info.get("extra").and_then(Value::as_str).unwrap_or_default();
+                    let resolved = format!("{host}{base_url}{extra}");
+                    if resolved.starts_with("http://") || resolved.starts_with("https://") {
+                        return Some(resolved);
+                    }
+                }
+            }
+        }
+    }
+    None
 }
 
 async fn resolve_douyu(url: &str) -> Result<ResolvedStream> {
@@ -254,15 +415,19 @@ fn unescape_json_url(raw: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        LivePlatform, ResolvedStream, detect_platform, extract_douyin_hls_streams, resolve_stream,
-        select_douyin_stream,
+        LivePlatform, ResolvedStream, bilibili_quality_qn, detect_platform,
+        extract_douyin_hls_streams, non_empty_json_string, parse_bilibili_room_id_from_url,
+        resolve_stream, select_bilibili_stream_url, select_douyin_stream,
     };
     use crate::checker::STREAMLINK_PATH;
+    use serde_json::json;
     use std::{path::PathBuf, time::Duration};
     use tokio::{process::Command, time::sleep};
 
     #[test]
     fn detects_requested_platform_urls() {
+        assert_eq!(detect_platform("https://live.bilibili.com/6"), LivePlatform::Bilibili);
+        assert_eq!(detect_platform("https://b23.tv/abc123"), LivePlatform::Bilibili);
         assert_eq!(detect_platform("https://www.douyu.com/74960"), LivePlatform::Douyu);
         assert_eq!(
             detect_platform("https://www.tiktok.com/@diemhuynh_2003/live"),
@@ -271,6 +436,66 @@ mod tests {
         assert_eq!(detect_platform("https://live.douyin.com/393646574978"), LivePlatform::Douyin);
         assert_eq!(detect_platform("https://www.twitch.tv/seucreysonreborn"), LivePlatform::Twitch);
         assert_eq!(detect_platform("https://kick.com/topson"), LivePlatform::Kick);
+    }
+
+    #[test]
+    fn parses_bilibili_room_id_from_common_urls() {
+        assert_eq!(
+            parse_bilibili_room_id_from_url("https://live.bilibili.com/6?broadcast_type=0"),
+            Some("6".to_string())
+        );
+        assert_eq!(
+            parse_bilibili_room_id_from_url("https://www.bilibili.com/live/22603245"),
+            Some("22603245".to_string())
+        );
+        assert_eq!(parse_bilibili_room_id_from_url("https://www.example.com/6"), None);
+    }
+
+    #[test]
+    fn maps_bilibili_quality_to_qn() {
+        assert_eq!(bilibili_quality_qn("best"), "10000");
+        assert_eq!(bilibili_quality_qn("4k"), "20000");
+        assert_eq!(bilibili_quality_qn("1080p"), "400");
+        assert_eq!(bilibili_quality_qn("720p"), "250");
+        assert_eq!(bilibili_quality_qn("worst"), "80");
+    }
+
+    #[test]
+    fn selects_bilibili_stream_url_from_play_info() {
+        let value = json!({
+            "code": 0,
+            "data": {
+                "playurl_info": {
+                    "playurl": {
+                        "stream": [{
+                            "format": [{
+                                "codec": [{
+                                    "base_url": "/live-bvc/stream.m4s",
+                                    "url_info": [{
+                                        "host": "https://example.live/",
+                                        "extra": "?token=abc"
+                                    }]
+                                }]
+                            }]
+                        }]
+                    }
+                }
+            }
+        });
+
+        assert_eq!(
+            select_bilibili_stream_url(&value),
+            Some("https://example.live//live-bvc/stream.m4s?token=abc".to_string())
+        );
+    }
+
+    #[test]
+    fn extracts_bilibili_title_from_room_info() {
+        let value = json!({
+            "code": 0,
+            "data": { "title": "开播测试" }
+        });
+        assert_eq!(non_empty_json_string(&value, &["data", "title"]), Some("开播测试".to_string()));
     }
 
     #[test]
@@ -294,6 +519,7 @@ mod tests {
     async fn live_examples_can_record_short_segments() {
         let cases = [
             ("douyu", "https://www.douyu.com/74960", true),
+            ("bilibili", "https://live.bilibili.com/6", true),
             ("tiktok", "https://www.tiktok.com/@diemhuynh_2003/live", false),
             ("douyin", "https://live.douyin.com/393646574978", true),
             ("twitch", "https://www.twitch.tv/seucreysonreborn", false),
