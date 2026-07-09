@@ -26,6 +26,7 @@ pub fn SettingsPage(
     let mut kick = use_signal(|| settings.quality.kick.clone());
     let mut default_quality = use_signal(|| settings.quality.default_quality.clone());
     let mut auto_cleanup_after_upload = use_signal(|| settings.auto_cleanup_after_upload);
+    let mut min_upload_file_size_mb = use_signal(|| settings.min_upload_file_size_mb.to_string());
     let mut form_error = use_signal::<Option<String>>(|| None);
     let segment_size_label =
         settings.segment_size_mb.map(|v| format!("{v} MB")).unwrap_or_else(|| "未限制".to_string());
@@ -34,6 +35,11 @@ pub fn SettingsPage(
         .map(|v| format!("{v} 秒"))
         .unwrap_or_else(|| "未限制".to_string());
     let cleanup_label = if settings.auto_cleanup_after_upload { "已开启" } else { "未开启" };
+    let small_file_label = if settings.min_upload_file_size_mb == 0 {
+        "未开启".to_string()
+    } else {
+        format!("{} MB", settings.min_upload_file_size_mb)
+    };
 
     rsx! {
         div { class: "page",
@@ -64,6 +70,11 @@ pub fn SettingsPage(
                     p { class: "stat-label", "上传后清理" }
                     p { class: "stat-value", "{cleanup_label}" }
                     p { class: "stat-hint", "节省本地录制空间" }
+                }
+                div { class: "stat-card",
+                    p { class: "stat-label", "小文件过滤" }
+                    p { class: "stat-value", "{small_file_label}" }
+                    p { class: "stat-hint", "上传前删除低于阈值的文件" }
                 }
             }
 
@@ -106,6 +117,15 @@ pub fn SettingsPage(
                 p { class: "label", "可选值：best、worst、1080p60、1080p、720p60、720p、480p、360p。" }
 
                 p { class: "section-title", "上传后处理" }
+                div { class: "field",
+                    label { "上传前删除小文件阈值（MB，0 表示不删除）" }
+                    input {
+                        class: "input",
+                        value: "{min_upload_file_size_mb}",
+                        placeholder: "默认 5",
+                        oninput: move |e| min_upload_file_size_mb.set(e.value()),
+                    }
+                }
                 label { class: "mini-check",
                     input {
                         r#type: "checkbox",
@@ -152,6 +172,18 @@ pub fn SettingsPage(
                                     return;
                                 }
                             };
+                            let min_upload_file_size_text = min_upload_file_size_mb();
+                            let min_upload_file_size = if min_upload_file_size_text.trim().is_empty() {
+                                shared::default_min_upload_file_size_mb()
+                            } else {
+                                match min_upload_file_size_text.trim().parse::<u64>() {
+                                    Ok(v) => v,
+                                    Err(_) => {
+                                        form_error.set(Some("上传前删除小文件阈值只能填写非负整数".to_string()));
+                                        return;
+                                    }
+                                }
+                            };
 
                             form_error.set(None);
                             on_save.call(RecordingSettings {
@@ -169,6 +201,7 @@ pub fn SettingsPage(
                                     default_quality: default_quality(),
                                 },
                                 auto_cleanup_after_upload: auto_cleanup_after_upload(),
+                                min_upload_file_size_mb: min_upload_file_size,
                             });
                         },
                         "保存设置"

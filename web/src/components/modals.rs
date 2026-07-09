@@ -26,6 +26,8 @@ pub fn DownloadModal(
     let mut segment_time_sec =
         use_signal(|| base_settings.segment_time_sec.map(|v| v.to_string()).unwrap_or_default());
     let mut auto_cleanup_after_upload = use_signal(|| base_settings.auto_cleanup_after_upload);
+    let mut min_upload_file_size_mb =
+        use_signal(|| base_settings.min_upload_file_size_mb.to_string());
     let mut q_bilibili = use_signal(|| base_settings.quality.bilibili.clone());
     let mut q_douyu = use_signal(|| base_settings.quality.douyu.clone());
     let mut q_huya = use_signal(|| base_settings.quality.huya.clone());
@@ -161,6 +163,15 @@ pub fn DownloadModal(
                         }
                         span { "上传全部成功后自动删除本地录制文件" }
                     }
+                    div { class: "field",
+                        label { "上传前删除小文件阈值（MB，0 表示不删除）" }
+                        input {
+                            class: "input",
+                            value: "{min_upload_file_size_mb}",
+                            placeholder: "默认 5",
+                            oninput: move |e| min_upload_file_size_mb.set(e.value()),
+                        }
+                    }
                 }
 
                 if let Some(err) = form_error() {
@@ -198,6 +209,18 @@ pub fn DownloadModal(
                                     return;
                                 }
                             };
+                            let min_upload_file_size_text = min_upload_file_size_mb();
+                            let min_upload_file_size = if min_upload_file_size_text.trim().is_empty() {
+                                shared::default_min_upload_file_size_mb()
+                            } else {
+                                match min_upload_file_size_text.trim().parse::<u64>() {
+                                    Ok(v) => v,
+                                    Err(_) => {
+                                        form_error.set(Some("上传前删除小文件阈值只能填写非负整数".to_string()));
+                                        return;
+                                    }
+                                }
+                            };
                             let task_settings = RecordingSettings {
                                 segment_size_mb: segment_size,
                                 segment_time_sec: segment_time,
@@ -213,6 +236,7 @@ pub fn DownloadModal(
                                     default_quality: q_default(),
                                 },
                                 auto_cleanup_after_upload: auto_cleanup_after_upload(),
+                                min_upload_file_size_mb: min_upload_file_size,
                             };
                             form_error.set(None);
                             on_save.call(DownloadConfig {

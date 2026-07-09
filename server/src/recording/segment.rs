@@ -22,6 +22,7 @@ pub(super) struct SegmentRecordResult {
     pub(super) filename: String,
     pub(super) limit_reached: bool,
     pub(super) terminal_error: Option<String>,
+    pub(super) disk_full: bool,
 }
 
 pub(super) async fn record_segment(
@@ -45,6 +46,7 @@ pub(super) async fn record_segment(
                 filename: String::new(),
                 limit_reached: false,
                 terminal_error: Some(format!("Failed to prepare recording file: {}", e)),
+                disk_full: is_disk_full_error(&e),
             };
         }
     };
@@ -96,6 +98,7 @@ pub(super) async fn record_segment(
                 filename: current_filename,
                 limit_reached: false,
                 terminal_error: Some(message),
+                disk_full: is_disk_full_error(&e),
             };
         }
     };
@@ -189,6 +192,15 @@ pub(super) async fn record_segment(
         }
     }
 
+    let disk_full = recorder_error.as_deref().is_some_and(is_disk_full_message);
+    if disk_full {
+        tracing::error!(
+            "Task {} detected disk full while recording {}, stopping recorder loop and starting upload for completed files",
+            task_id,
+            current_filename
+        );
+    }
+
     let terminal_error = if !limit_reached
         && recorder_error.is_some()
         && !recorded_file_has_content(&current_filename).await
@@ -198,7 +210,19 @@ pub(super) async fn record_segment(
         None
     };
 
-    SegmentRecordResult { filename: current_filename, limit_reached, terminal_error }
+    SegmentRecordResult { filename: current_filename, limit_reached, terminal_error, disk_full }
+}
+
+fn is_disk_full_error(error: &std::io::Error) -> bool {
+    error.raw_os_error() == Some(28) || is_disk_full_message(&error.to_string())
+}
+
+fn is_disk_full_message(message: &str) -> bool {
+    let lower = message.to_ascii_lowercase();
+    lower.contains("no space left on device")
+        || lower.contains("errno 28")
+        || lower.contains("enospc")
+        || lower.contains("disk full")
 }
 
 enum RecorderCommand {
@@ -409,7 +433,7 @@ pub(super) async fn decide_next_segment_action(
 
 #[cfg(test)]
 mod tests {
-    use super::{ffmpeg_headers_for_input, is_bilibili_cdn_url};
+    use super::{ffmpeg_headers_for_input, is_bilibili_cdn_url, is_disk_full_message};
 
     #[test]
     fn ffmpeg_headers_include_bilibili_referer_for_bilibili_cdn() {
@@ -426,5 +450,13 @@ mod tests {
 
         assert!(!headers.contains("Referer: https://live.bilibili.com/"));
         assert!(headers.contains("User-Agent: Mozilla/5.0"));
+    }
+
+    #[test]
+    fn disk_full_detector_recognizes_common_recorder_messages() {
+        assert!(is_disk_full_message("OSError: [Errno 28] No space left on device"));
+        assert!(is_disk_full_message("write failed: ENOSPC"));
+        assert!(is_disk_full_message("fatal error: disk full"));
+        assert!(!is_disk_full_message("network timeout"));
     }
 }

@@ -5,6 +5,7 @@ pub(super) struct RecorderRuntimeConfig {
     pub(super) segment_time_sec: Option<u64>,
     pub(super) quality: String,
     pub(super) auto_cleanup_after_upload: bool,
+    pub(super) min_upload_file_size_bytes: u64,
 }
 
 pub(super) fn build_runtime_config(
@@ -19,5 +20,6 @@ pub(super) fn build_runtime_config(
         segment_time_sec: settings.segment_time_sec.filter(|v| *v > 0),
         quality: quality_for_url(url, &settings.quality),
         auto_cleanup_after_upload: settings.auto_cleanup_after_upload,
+        min_upload_file_size_bytes: settings.min_upload_file_size_mb.saturating_mul(1024 * 1024),
     }
 }

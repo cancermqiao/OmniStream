@@ -193,7 +193,13 @@ impl Default for PlatformQualityConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+pub const DEFAULT_MIN_UPLOAD_FILE_SIZE_MB: u64 = 5;
+
+pub fn default_min_upload_file_size_mb() -> u64 {
+    DEFAULT_MIN_UPLOAD_FILE_SIZE_MB
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct RecordingSettings {
     #[serde(default)]
     pub segment_size_mb: Option<u64>,
@@ -203,6 +209,20 @@ pub struct RecordingSettings {
     pub quality: PlatformQualityConfig,
     #[serde(default)]
     pub auto_cleanup_after_upload: bool,
+    #[serde(default = "default_min_upload_file_size_mb")]
+    pub min_upload_file_size_mb: u64,
+}
+
+impl Default for RecordingSettings {
+    fn default() -> Self {
+        Self {
+            segment_size_mb: None,
+            segment_time_sec: None,
+            quality: PlatformQualityConfig::default(),
+            auto_cleanup_after_upload: false,
+            min_upload_file_size_mb: default_min_upload_file_size_mb(),
+        }
+    }
 }
 
 #[async_trait::async_trait]
@@ -212,7 +232,7 @@ pub trait StreamChecker: Send + Sync {
 
 #[cfg(test)]
 mod tests {
-    use super::{DownloadConfig, TaskStatus, UploadConfig};
+    use super::{DownloadConfig, RecordingSettings, TaskStatus, UploadConfig};
 
     #[test]
     fn upload_config_default_values_are_stable() {
@@ -248,6 +268,31 @@ mod tests {
             serde_json::from_str(json).expect("valid quality config json");
 
         assert_eq!(config.kick, "best");
+    }
+
+    #[test]
+    fn recording_settings_defaults_small_file_threshold_to_5mb() {
+        let settings = RecordingSettings::default();
+
+        assert_eq!(settings.min_upload_file_size_mb, 5);
+
+        let json = r#"{
+            "segment_size_mb":null,
+            "segment_time_sec":7200,
+            "quality":{
+                "bilibili":"best",
+                "douyu":"best",
+                "huya":"best",
+                "twitch":"best",
+                "youtube":"best",
+                "default_quality":"best"
+            },
+            "auto_cleanup_after_upload":true
+        }"#;
+        let settings: RecordingSettings =
+            serde_json::from_str(json).expect("valid recording settings json");
+
+        assert_eq!(settings.min_upload_file_size_mb, 5);
     }
 
     #[test]

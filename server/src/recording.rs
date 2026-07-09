@@ -20,6 +20,12 @@ use crate::{
     uploader::UploadTarget,
 };
 
+#[derive(Debug, Clone, Copy)]
+pub struct UploadRunOptions {
+    pub auto_cleanup_after_upload: bool,
+    pub min_upload_file_size_bytes: u64,
+}
+
 async fn prepare_segment_file(
     state: &SharedState,
     task_id: &str,
@@ -52,7 +58,7 @@ pub async fn run_upload(
     configs: Vec<UploadConfig>,
     live_title: Option<String>,
     task_name: String,
-    auto_cleanup_after_upload: bool,
+    options: UploadRunOptions,
 ) {
     if filenames.is_empty() {
         let message = format!("Task {task_id} has no files to upload");
@@ -63,8 +69,23 @@ pub async fn run_upload(
         }
         return;
     }
+
     if configs.is_empty() {
         tracing::info!("Task {} has no upload configs, skipping upload", task_id);
+        if update_status {
+            set_task_status(&state, &task_id, TaskStatus::Completed).await;
+            clear_task_handle(&state, &task_id);
+        }
+        return;
+    }
+
+    let filenames =
+        prepare_upload_files(&task_id, filenames, options.min_upload_file_size_bytes).await;
+    if filenames.is_empty() {
+        tracing::warn!(
+            "Task {} has no files left after small-file cleanup, marking completed",
+            task_id
+        );
         if update_status {
             set_task_status(&state, &task_id, TaskStatus::Completed).await;
             clear_task_handle(&state, &task_id);
@@ -119,7 +140,7 @@ pub async fn run_upload(
     let final_status =
         if all_success { TaskStatus::Completed } else { TaskStatus::Error(error_msg) };
 
-    if all_success && auto_cleanup_after_upload {
+    if all_success && options.auto_cleanup_after_upload {
         let mut uniq = HashSet::new();
         for file in filenames {
             if !uniq.insert(file.clone()) {
@@ -140,6 +161,59 @@ pub async fn run_upload(
         set_task_status(&state, &task_id, final_status).await;
         clear_task_handle(&state, &task_id);
     }
+}
+
+async fn prepare_upload_files(
+    task_id: &str,
+    filenames: Vec<String>,
+    min_upload_file_size_bytes: u64,
+) -> Vec<String> {
+    if min_upload_file_size_bytes == 0 {
+        return filenames;
+    }
+
+    let mut kept = Vec::new();
+    let mut seen = HashSet::new();
+    for file in filenames {
+        if !seen.insert(file.clone()) {
+            continue;
+        }
+
+        match tokio::fs::metadata(&file).await {
+            Ok(meta) if meta.is_file() && meta.len() < min_upload_file_size_bytes => {
+                match tokio::fs::remove_file(&file).await {
+                    Ok(()) => tracing::warn!(
+                        "Task {} deleted small recording before upload: file={}, size={} bytes, threshold={} bytes",
+                        task_id,
+                        file,
+                        meta.len(),
+                        min_upload_file_size_bytes
+                    ),
+                    Err(e) => tracing::warn!(
+                        "Task {} failed to delete small recording before upload, skipping upload for file={}, size={} bytes, threshold={} bytes: {}",
+                        task_id,
+                        file,
+                        meta.len(),
+                        min_upload_file_size_bytes,
+                        e
+                    ),
+                }
+            }
+            Ok(meta) if meta.is_file() => kept.push(file),
+            Ok(_) => tracing::warn!("Task {} skipped non-file upload path: {}", task_id, file),
+            Err(e) => {
+                tracing::warn!(
+                    "Task {} failed to inspect upload file {}, keeping it for uploader validation: {}",
+                    task_id,
+                    file,
+                    e
+                );
+                kept.push(file);
+            }
+        }
+    }
+
+    kept
 }
 
 pub async fn spawn_recorder(
@@ -178,17 +252,32 @@ pub async fn spawn_recorder(
 
         loop {
             let result = record_segment(&task_id, &url, &state_for_task, &runtime).await;
+
+            if !result.filename.is_empty() {
+                update_recorded_files(
+                    &task_id,
+                    result.filename,
+                    &mut recorded_files,
+                    &mut consecutive_empty_segments,
+                );
+            }
+
+            if result.disk_full {
+                terminal_error = result
+                    .terminal_error
+                    .or_else(|| Some("Recording stopped because disk storage is full".to_string()));
+                tracing::warn!(
+                    "Task {} stopped recording because disk storage is full; recorded_files={} will be uploaded if available",
+                    task_id,
+                    recorded_files.len()
+                );
+                break;
+            }
+
             if let Some(message) = result.terminal_error {
                 terminal_error = Some(message);
                 break;
             }
-
-            update_recorded_files(
-                &task_id,
-                result.filename,
-                &mut recorded_files,
-                &mut consecutive_empty_segments,
-            );
 
             if result.limit_reached {
                 continue;
@@ -225,7 +314,10 @@ pub async fn spawn_recorder(
                 upload_configs,
                 live_title,
                 final_task_name,
-                runtime.auto_cleanup_after_upload,
+                UploadRunOptions {
+                    auto_cleanup_after_upload: runtime.auto_cleanup_after_upload,
+                    min_upload_file_size_bytes: runtime.min_upload_file_size_bytes,
+                },
             )
             .await;
         } else {
@@ -294,8 +386,9 @@ fn sanitize_for_filename(raw: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::quality_for_url;
+    use super::{prepare_upload_files, quality_for_url};
     use shared::PlatformQualityConfig;
+    use uuid::Uuid;
 
     #[test]
     fn quality_for_url_supports_requested_platforms() {
@@ -320,5 +413,45 @@ mod tests {
         assert_eq!(quality_for_url("https://live.douyin.com/393646574978", &quality), "douyin");
         assert_eq!(quality_for_url("https://www.twitch.tv/seucreysonreborn", &quality), "twitch");
         assert_eq!(quality_for_url("https://kick.com/topson", &quality), "kick");
+    }
+
+    #[tokio::test]
+    async fn prepare_upload_files_deletes_files_smaller_than_threshold() {
+        let dir = std::env::temp_dir().join(format!("omnistream-upload-filter-{}", Uuid::new_v4()));
+        tokio::fs::create_dir_all(&dir).await.expect("create temp dir");
+        let small = dir.join("small.mp4");
+        let large = dir.join("large.mp4");
+        tokio::fs::write(&small, vec![1_u8; 4]).await.expect("write small file");
+        tokio::fs::write(&large, vec![1_u8; 8]).await.expect("write large file");
+
+        let files = prepare_upload_files(
+            "test-task",
+            vec![small.to_string_lossy().to_string(), large.to_string_lossy().to_string()],
+            5,
+        )
+        .await;
+
+        assert_eq!(files, vec![large.to_string_lossy().to_string()]);
+        assert!(!small.exists());
+        assert!(large.exists());
+
+        tokio::fs::remove_dir_all(&dir).await.expect("cleanup temp dir");
+    }
+
+    #[tokio::test]
+    async fn prepare_upload_files_keeps_all_files_when_threshold_disabled() {
+        let dir =
+            std::env::temp_dir().join(format!("omnistream-upload-filter-off-{}", Uuid::new_v4()));
+        tokio::fs::create_dir_all(&dir).await.expect("create temp dir");
+        let small = dir.join("small.mp4");
+        tokio::fs::write(&small, vec![1_u8; 1]).await.expect("write small file");
+
+        let files =
+            prepare_upload_files("test-task", vec![small.to_string_lossy().to_string()], 0).await;
+
+        assert_eq!(files, vec![small.to_string_lossy().to_string()]);
+        assert!(small.exists());
+
+        tokio::fs::remove_dir_all(&dir).await.expect("cleanup temp dir");
     }
 }

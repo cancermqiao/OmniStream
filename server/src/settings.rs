@@ -5,6 +5,7 @@ use crate::state::SharedState;
 
 const MAX_SEGMENT_SIZE_MB: u64 = 102_400;
 const MAX_SEGMENT_TIME_SEC: u64 = 86_400;
+const MAX_MIN_UPLOAD_FILE_SIZE_MB: u64 = 102_400;
 
 pub async fn get_recording_settings(State(state): State<SharedState>) -> Json<RecordingSettings> {
     Json(get_recording_settings_service(&state).await)
@@ -86,6 +87,12 @@ pub(crate) fn sanitize_recording_settings(
             MAX_SEGMENT_TIME_SEC
         ));
     }
+    if settings.min_upload_file_size_mb > MAX_MIN_UPLOAD_FILE_SIZE_MB {
+        return Err(format!(
+            "min_upload_file_size_mb exceeds maximum allowed value: {}",
+            MAX_MIN_UPLOAD_FILE_SIZE_MB
+        ));
+    }
 
     Ok(settings)
 }
@@ -109,6 +116,7 @@ mod tests {
         let mut settings = RecordingSettings {
             segment_size_mb: Some(0),
             segment_time_sec: Some(0),
+            min_upload_file_size_mb: 0,
             ..Default::default()
         };
         settings.quality.bilibili = "  ".to_string();
@@ -118,6 +126,7 @@ mod tests {
 
         assert_eq!(sanitized.segment_size_mb, None);
         assert_eq!(sanitized.segment_time_sec, None);
+        assert_eq!(sanitized.min_upload_file_size_mb, 0);
         assert_eq!(sanitized.quality.bilibili, "best");
         assert_eq!(sanitized.quality.default_quality, "best");
     }
@@ -125,6 +134,13 @@ mod tests {
     #[test]
     fn sanitize_recording_settings_rejects_extreme_values() {
         let settings = RecordingSettings { segment_size_mb: Some(102_401), ..Default::default() };
+
+        assert!(sanitize_recording_settings(settings).is_err());
+    }
+
+    #[test]
+    fn sanitize_recording_settings_rejects_extreme_small_file_threshold() {
+        let settings = RecordingSettings { min_upload_file_size_mb: 102_401, ..Default::default() };
 
         assert!(sanitize_recording_settings(settings).is_err());
     }

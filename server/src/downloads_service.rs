@@ -58,6 +58,23 @@ pub(crate) async fn resolve_auto_cleanup_after_upload(
     }
 }
 
+pub(crate) async fn resolve_min_upload_file_size_bytes(
+    state: &SharedState,
+    download: &DownloadConfig,
+) -> u64 {
+    let mb = if download.use_custom_recording_settings {
+        download
+            .recording_settings
+            .as_ref()
+            .map(|s| s.min_upload_file_size_mb)
+            .unwrap_or_else(shared::default_min_upload_file_size_mb)
+    } else {
+        state.recording_settings.read().await.min_upload_file_size_mb
+    };
+
+    mb.saturating_mul(1024 * 1024)
+}
+
 pub(crate) fn is_recording_file(path: &Path) -> bool {
     let ext = path
         .extension()

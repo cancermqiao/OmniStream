@@ -9,7 +9,8 @@ use uuid::Uuid;
 use crate::{
     downloads_service::{
         ScanRecordingFilesError, load_download_for_manual_upload,
-        resolve_auto_cleanup_after_upload, resolve_manual_upload_configs, scan_recording_files,
+        resolve_auto_cleanup_after_upload, resolve_manual_upload_configs,
+        resolve_min_upload_file_size_bytes, scan_recording_files,
     },
     recording, settings,
     state::{RecorderHandle, SharedState},
@@ -404,14 +405,16 @@ pub async fn trigger_manual_upload_service(
     let live_title = state.checker.fetch_live_title(&download.url).await;
     let task_name = download.name.clone();
     let auto_cleanup_after_upload = resolve_auto_cleanup_after_upload(state, &download).await;
+    let min_upload_file_size_bytes = resolve_min_upload_file_size_bytes(state, &download).await;
 
     let manual_task_id = format!("manual-upload-{}", Uuid::new_v4());
     tracing::info!(
-        "Manual upload accepted: manual_task_id={}, task_name={}, files={}, upload_configs={}",
+        "Manual upload accepted: manual_task_id={}, task_name={}, files={}, upload_configs={}, min_upload_file_size_bytes={}",
         manual_task_id,
         task_name,
         files.len(),
-        upload_configs.len()
+        upload_configs.len(),
+        min_upload_file_size_bytes
     );
 
     let state_for_upload = state.clone();
@@ -449,7 +452,7 @@ pub async fn trigger_manual_upload_service(
             upload_configs,
             live_title,
             task_name,
-            auto_cleanup_after_upload,
+            recording::UploadRunOptions { auto_cleanup_after_upload, min_upload_file_size_bytes },
         )
         .await;
     });
