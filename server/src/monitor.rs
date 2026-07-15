@@ -2,6 +2,7 @@ use shared::{TaskStatus, UploadConfig};
 
 use crate::{
     state::SharedState,
+    storage_guard::recording_storage_below_min_free_percent,
     task_launcher::{LaunchTaskParams, launch_recording_task},
 };
 
@@ -38,6 +39,28 @@ pub async fn run_monitor(state: SharedState) {
             });
             if is_busy {
                 continue;
+            }
+
+            match recording_storage_below_min_free_percent().await {
+                Ok(Some(snapshot)) => {
+                    tracing::warn!(
+                        "Monitor skipped starting new recording for {} because recording storage is below 2% free: path={}, available_kb={}, total_kb={}, free_percent={:.2}",
+                        download.name,
+                        snapshot.path.display(),
+                        snapshot.available_kb,
+                        snapshot.total_kb,
+                        snapshot.free_percent
+                    );
+                    continue;
+                }
+                Ok(None) => {}
+                Err(e) => {
+                    tracing::warn!(
+                        "Monitor could not check recording storage before starting {}: {}",
+                        download.name,
+                        e
+                    );
+                }
             }
 
             state.checking_urls.insert(download.url.clone(), ());

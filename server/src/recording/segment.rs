@@ -6,10 +6,14 @@ use tokio::sync::Mutex;
 use tokio::time::{Instant, MissedTickBehavior, interval, sleep};
 
 use super::{RecorderRuntimeConfig, prepare_segment_file, resolve_task_name, stop_segment_process};
-use crate::{checker::STREAMLINK_PATH, platform::resolve_stream, state::SharedState};
+use crate::{
+    checker::STREAMLINK_PATH, platform::resolve_stream, state::SharedState,
+    storage_guard::recording_storage_below_min_free_percent,
+};
 
 const FFMPEG_PATH: &str = "ffmpeg";
 const RECORDER_OUTPUT_LINES: usize = 20;
+const STORAGE_GUARD_CHECK_INTERVAL: Duration = Duration::from_secs(30);
 
 type RecorderOutputBuffer = Arc<Mutex<VecDeque<String>>>;
 
@@ -23,6 +27,7 @@ pub(super) struct SegmentRecordResult {
     pub(super) limit_reached: bool,
     pub(super) terminal_error: Option<String>,
     pub(super) disk_full: bool,
+    pub(super) storage_guard_triggered: bool,
 }
 
 pub(super) async fn record_segment(
@@ -47,6 +52,7 @@ pub(super) async fn record_segment(
                 limit_reached: false,
                 terminal_error: Some(format!("Failed to prepare recording file: {}", e)),
                 disk_full: is_disk_full_error(&e),
+                storage_guard_triggered: false,
             };
         }
     };
@@ -99,6 +105,7 @@ pub(super) async fn record_segment(
                 limit_reached: false,
                 terminal_error: Some(message),
                 disk_full: is_disk_full_error(&e),
+                storage_guard_triggered: false,
             };
         }
     };
@@ -121,8 +128,10 @@ pub(super) async fn record_segment(
     );
 
     let mut limit_reached = false;
+    let mut storage_guard_triggered = false;
     let mut recorder_error = None;
     let segment_started_at = Instant::now();
+    let mut last_storage_guard_check: Option<Instant> = None;
     let mut check_interval = interval(Duration::from_secs(1));
     check_interval.set_missed_tick_behavior(MissedTickBehavior::Delay);
 
@@ -188,6 +197,36 @@ pub(super) async fn record_segment(
                     stop_segment_process(&mut child, task_id, "size split").await;
                     break;
                 }
+
+                if last_storage_guard_check
+                    .map(|last| last.elapsed() >= STORAGE_GUARD_CHECK_INTERVAL)
+                    .unwrap_or(true)
+                {
+                    last_storage_guard_check = Some(Instant::now());
+                    match recording_storage_below_min_free_percent().await {
+                        Ok(Some(snapshot)) => {
+                            tracing::warn!(
+                                "Task {} stopping current segment because recording storage is below 2% free: path={}, available_kb={}, total_kb={}, free_percent={:.2}",
+                                task_id,
+                                snapshot.path.display(),
+                                snapshot.available_kb,
+                                snapshot.total_kb,
+                                snapshot.free_percent
+                            );
+                            storage_guard_triggered = true;
+                            stop_segment_process(&mut child, task_id, "storage guard").await;
+                            break;
+                        }
+                        Ok(None) => {}
+                        Err(e) => {
+                            tracing::warn!(
+                                "Task {} failed to check recording storage during segment: {}",
+                                task_id,
+                                e
+                            );
+                        }
+                    }
+                }
             }
         }
     }
@@ -202,6 +241,7 @@ pub(super) async fn record_segment(
     }
 
     let terminal_error = if !limit_reached
+        && !storage_guard_triggered
         && recorder_error.is_some()
         && !recorded_file_has_content(&current_filename).await
     {
@@ -210,7 +250,13 @@ pub(super) async fn record_segment(
         None
     };
 
-    SegmentRecordResult { filename: current_filename, limit_reached, terminal_error, disk_full }
+    SegmentRecordResult {
+        filename: current_filename,
+        limit_reached,
+        terminal_error,
+        disk_full,
+        storage_guard_triggered,
+    }
 }
 
 fn is_disk_full_error(error: &std::io::Error) -> bool {

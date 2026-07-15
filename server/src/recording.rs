@@ -17,6 +17,7 @@ use self::task_state::{
 };
 use crate::{
     state::{RecorderHandle, SharedState},
+    storage_guard::recording_storage_below_min_free_percent,
     uploader::UploadTarget,
 };
 
@@ -251,6 +252,29 @@ pub async fn spawn_recorder(
         let mut terminal_error: Option<String> = None;
 
         loop {
+            match recording_storage_below_min_free_percent().await {
+                Ok(Some(snapshot)) => {
+                    tracing::warn!(
+                        "Task {} skipped starting next segment because recording storage is below 2% free: path={}, available_kb={}, total_kb={}, free_percent={:.2}; recorded_files={} will be uploaded if available",
+                        task_id,
+                        snapshot.path.display(),
+                        snapshot.available_kb,
+                        snapshot.total_kb,
+                        snapshot.free_percent,
+                        recorded_files.len()
+                    );
+                    break;
+                }
+                Ok(None) => {}
+                Err(e) => {
+                    tracing::warn!(
+                        "Task {} could not check recording storage before next segment: {}",
+                        task_id,
+                        e
+                    );
+                }
+            }
+
             let result = record_segment(&task_id, &url, &state_for_task, &runtime).await;
 
             if !result.filename.is_empty() {
@@ -268,6 +292,15 @@ pub async fn spawn_recorder(
                     .or_else(|| Some("Recording stopped because disk storage is full".to_string()));
                 tracing::warn!(
                     "Task {} stopped recording because disk storage is full; recorded_files={} will be uploaded if available",
+                    task_id,
+                    recorded_files.len()
+                );
+                break;
+            }
+
+            if result.storage_guard_triggered {
+                tracing::warn!(
+                    "Task {} stopped recording because recording storage is below 2% free; recorded_files={} will be uploaded if available",
                     task_id,
                     recorded_files.len()
                 );
@@ -357,7 +390,7 @@ fn quality_for_url(url: &str, quality: &shared::PlatformQualityConfig) -> String
     quality.default_quality.clone()
 }
 
-fn recording_root_dir() -> PathBuf {
+pub(crate) fn recording_root_dir() -> PathBuf {
     if let Ok(v) = std::env::var("BILIUP_RECORDINGS_DIR") {
         let trimmed = v.trim();
         if !trimmed.is_empty() {
