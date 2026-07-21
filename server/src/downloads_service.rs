@@ -114,9 +114,42 @@ pub(crate) async fn scan_recording_files(
     Ok(files)
 }
 
+pub(crate) async fn recording_files_size_bytes(task_dir: &Path) -> u64 {
+    let mut total = 0_u64;
+    let mut dirs = vec![task_dir.to_path_buf()];
+
+    while let Some(dir) = dirs.pop() {
+        let Ok(mut entries) = tokio::fs::read_dir(&dir).await else {
+            continue;
+        };
+
+        loop {
+            match entries.next_entry().await {
+                Ok(Some(entry)) => {
+                    let path = entry.path();
+                    let Ok(meta) = entry.metadata().await else {
+                        continue;
+                    };
+                    if meta.is_dir() {
+                        dirs.push(path);
+                    } else if meta.is_file() && is_recording_file(&path) {
+                        total = total.saturating_add(meta.len());
+                    }
+                }
+                Ok(None) => break,
+                Err(_) => break,
+            }
+        }
+    }
+
+    total
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{is_recording_file, scan_recording_files, select_upload_configs};
+    use super::{
+        is_recording_file, recording_files_size_bytes, scan_recording_files, select_upload_configs,
+    };
     use shared::{UploadConfig, UploadTemplate};
     use std::path::Path;
     use uuid::Uuid;
@@ -145,6 +178,22 @@ mod tests {
         assert_eq!(files.len(), 2);
         assert!(files[0].ends_with("a.MKV"));
         assert!(files[1].ends_with("b.mp4"));
+
+        tokio::fs::remove_dir_all(&dir).await.expect("cleanup temp dir");
+    }
+
+    #[tokio::test]
+    async fn recording_files_size_counts_supported_files_recursively() {
+        let dir = std::env::temp_dir().join(format!("omnistream-size-{}", Uuid::new_v4()));
+        let nested = dir.join("nested");
+        tokio::fs::create_dir_all(&nested).await.expect("create temp dir");
+        tokio::fs::write(dir.join("a.mp4"), vec![1_u8; 4]).await.expect("write mp4");
+        tokio::fs::write(nested.join("b.ts"), vec![1_u8; 5]).await.expect("write ts");
+        tokio::fs::write(dir.join("ignore.txt"), vec![1_u8; 99]).await.expect("write txt");
+
+        let size = recording_files_size_bytes(&dir).await;
+
+        assert_eq!(size, 9);
 
         tokio::fs::remove_dir_all(&dir).await.expect("cleanup temp dir");
     }

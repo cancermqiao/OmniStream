@@ -45,6 +45,7 @@ pub fn App() -> Element {
                 if let Some(v) = api::fetch_uploads(api_url).await {
                     next.uploads = v;
                 }
+                next.storage_stats = api::fetch_storage_stats(api_url).await;
                 if account_tick == 0
                     && let Some(v) = api::fetch_accounts(api_url).await
                 {
@@ -146,6 +147,7 @@ pub fn App() -> Element {
                             DownloadsPage {
                                 downloads: snapshot.downloads.clone(),
                                 uploads: snapshot.uploads.clone(),
+                                storage_stats: snapshot.storage_stats.clone(),
                                 on_create: move |_| {
                                     download_modal_error.set(None);
                                     editing_download.set(Some(DownloadConfig::default()));
@@ -162,6 +164,8 @@ pub fn App() -> Element {
                                             if let Some(v) = api::fetch_downloads(api_url).await {
                                                 let mut next = data();
                                                 next.downloads = v;
+                                                next.storage_stats =
+                                                    api::fetch_storage_stats(api_url).await;
                                                 data.set(next);
                                             }
                                         }
@@ -188,6 +192,8 @@ pub fn App() -> Element {
                                     if let Some(v) = api::fetch_downloads(api_url).await {
                                         let mut next = data();
                                         next.downloads = v;
+                                        next.storage_stats =
+                                            api::fetch_storage_stats(api_url).await;
                                         data.set(next);
                                     }
                                 },
@@ -211,6 +217,8 @@ pub fn App() -> Element {
                                     if let Some(v) = api::fetch_downloads(api_url).await {
                                         let mut next = data();
                                         next.downloads = v;
+                                        next.storage_stats =
+                                            api::fetch_storage_stats(api_url).await;
                                         data.set(next);
                                     }
                                 },
@@ -232,6 +240,8 @@ pub fn App() -> Element {
                                     if let Some(v) = api::fetch_downloads(api_url).await {
                                         let mut next = data();
                                         next.downloads = v;
+                                        next.storage_stats =
+                                            api::fetch_storage_stats(api_url).await;
                                         data.set(next);
                                     }
                                 },
@@ -253,6 +263,8 @@ pub fn App() -> Element {
                                     if let Some(v) = api::fetch_downloads(api_url).await {
                                         let mut next = data();
                                         next.downloads = v;
+                                        next.storage_stats =
+                                            api::fetch_storage_stats(api_url).await;
                                         data.set(next);
                                     }
                                 },
@@ -269,6 +281,13 @@ pub fn App() -> Element {
                                             operation_message.set(Some(format!("清空下载任务「{name}」文件失败：{e}")));
                                             operation_error.set(true);
                                         }
+                                    }
+                                    if let Some(v) = api::fetch_downloads(api_url).await {
+                                        let mut next = data();
+                                        next.downloads = v;
+                                        next.storage_stats =
+                                            api::fetch_storage_stats(api_url).await;
+                                        data.set(next);
                                     }
                                 },
                                 manual_upload_message: manual_upload_message(),
@@ -361,6 +380,8 @@ pub fn App() -> Element {
                                             if let Some(v) = api::fetch_downloads(api_url).await {
                                                 let mut next = data();
                                                 next.downloads = v;
+                                                next.storage_stats =
+                                                    api::fetch_storage_stats(api_url).await;
                                                 data.set(next);
                                             }
                                         }
@@ -392,6 +413,8 @@ pub fn App() -> Element {
                                     if let Some(v) = api::fetch_downloads(api_url).await {
                                         let mut next = data();
                                         next.downloads = v;
+                                        next.storage_stats =
+                                            api::fetch_storage_stats(api_url).await;
                                         data.set(next);
                                     }
                                 },
@@ -441,6 +464,7 @@ pub fn App() -> Element {
                                 if let Some(v) = api::fetch_downloads(api_url).await {
                                     let mut next = data();
                                     next.downloads = v;
+                                    next.storage_stats = api::fetch_storage_stats(api_url).await;
                                     data.set(next);
                                 }
                             }

@@ -4,11 +4,13 @@ use axum::{
     routing::{any, delete, get, post},
 };
 use dioxus_server::{DioxusRouterExt, ServeConfig};
-use shared::{DownloadConfig, QrStartResponse, RecordingSettings, UploadAccount, UploadTemplate};
+use shared::{
+    DownloadConfig, QrStartResponse, RecordingSettings, StorageStats, UploadAccount, UploadTemplate,
+};
 use std::sync::Arc;
 use tower_http::cors::CorsLayer;
 
-use crate::{accounts, downloads, settings, state::SharedState, tasks, uploads};
+use crate::{accounts, downloads, settings, state::SharedState, storage, tasks, uploads};
 
 #[derive(Clone)]
 struct FrontendBackend {
@@ -87,6 +89,10 @@ impl app::api::BackendApi for FrontendBackend {
         Ok(settings::get_recording_settings_service(&self.state).await)
     }
 
+    async fn fetch_storage_stats(&self) -> Result<StorageStats, String> {
+        storage::get_storage_stats_service().await
+    }
+
     async fn save_recording_settings(&self, settings: RecordingSettings) -> Result<(), String> {
         settings::set_recording_settings_service(&self.state, settings).await.map_err(message)
     }
@@ -105,6 +111,7 @@ pub fn build_router(state: SharedState) -> Router {
 
     let api_router = Router::new()
         .route("/api/tasks", get(tasks::list_tasks).post(tasks::add_task))
+        .route("/api/storage", get(storage::get_storage_stats))
         .route("/api/tasks/{id}/stop", post(tasks::stop_task))
         .route("/api/downloads", get(downloads::list_downloads).post(downloads::add_download))
         .route("/api/downloads/{id}", delete(downloads::delete_download))

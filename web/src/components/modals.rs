@@ -252,6 +252,7 @@ pub fn DownloadModal(
                                 } else {
                                     None
                                 },
+                                recording_file_size_bytes: 0,
                             });
                         },
                         "保存"

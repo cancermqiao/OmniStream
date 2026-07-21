@@ -25,6 +25,10 @@ pub(crate) async fn recording_storage_below_min_free_percent()
     }
 }
 
+pub(crate) async fn recording_disk_space_snapshot() -> Result<DiskSpaceSnapshot, String> {
+    disk_space_snapshot(&recording::recording_root_dir()).await
+}
+
 async fn disk_space_snapshot(path: &Path) -> Result<DiskSpaceSnapshot, String> {
     let inspect_path = nearest_existing_path(path);
     let output = Command::new("df")

@@ -90,6 +90,8 @@ pub struct DownloadConfig {
     pub use_custom_recording_settings: bool, // 是否启用任务级录制设置
     #[serde(default)]
     pub recording_settings: Option<RecordingSettings>, // 任务级录制设置
+    #[serde(default)]
+    pub recording_file_size_bytes: u64, // 当前任务本地录制文件占用空间（实时计算，不落库）
 }
 
 impl Default for DownloadConfig {
@@ -103,8 +105,18 @@ impl Default for DownloadConfig {
             enabled: true,
             use_custom_recording_settings: false,
             recording_settings: None,
+            recording_file_size_bytes: 0,
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+pub struct StorageStats {
+    pub path: String,
+    pub total_bytes: u64,
+    pub used_bytes: u64,
+    pub available_bytes: u64,
+    pub used_percent: f64,
 }
 
 // 对应前端 Upload 配置 (模板)

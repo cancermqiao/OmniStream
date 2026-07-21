@@ -1,10 +1,11 @@
 use dioxus::prelude::*;
-use shared::{DownloadConfig, UploadTemplate};
+use shared::{DownloadConfig, StorageStats, UploadTemplate};
 
 #[component]
 pub fn DownloadsPage(
     downloads: Vec<DownloadConfig>,
     uploads: Vec<UploadTemplate>,
+    storage_stats: Option<StorageStats>,
     on_create: EventHandler<()>,
     on_edit: EventHandler<DownloadConfig>,
     on_delete: EventHandler<String>,
@@ -29,6 +30,23 @@ pub fn DownloadsPage(
         })
         .count();
     let stopped_count = downloads.iter().filter(|d| !d.enabled).count();
+    let storage_label = storage_stats
+        .as_ref()
+        .map(|stats| format!("{:.1}%", stats.used_percent))
+        .unwrap_or_else(|| "--".to_string());
+    let storage_hint = storage_stats
+        .as_ref()
+        .map(|stats| {
+            format!(
+                "已用 {} / 总计 {}，可用 {}",
+                format_bytes(stats.used_bytes),
+                format_bytes(stats.total_bytes),
+                format_bytes(stats.available_bytes)
+            )
+        })
+        .unwrap_or_else(|| "磁盘统计加载中".to_string());
+    let storage_progress =
+        storage_stats.as_ref().map(|stats| stats.used_percent.clamp(0.0, 100.0)).unwrap_or(0.0);
     let keyword = search().to_lowercase();
     let mut rows: Vec<DownloadConfig> = downloads
         .into_iter()
@@ -75,6 +93,14 @@ pub fn DownloadsPage(
                     p { class: "stat-label", "已停止" }
                     p { class: "stat-value", "{stopped_count}" }
                     p { class: "stat-hint", "暂停自动监听" }
+                }
+                div { class: "stat-card stat-card-wide",
+                    p { class: "stat-label", "磁盘存储" }
+                    p { class: "stat-value", "{storage_label}" }
+                    div { class: "storage-meter", title: "{storage_hint}",
+                        div { class: "storage-meter-fill", style: "width: {storage_progress}%;" }
+                    }
+                    p { class: "stat-hint", "{storage_hint}" }
                 }
             }
 
@@ -125,13 +151,14 @@ pub fn DownloadsPage(
                                 th { "任务名称" }
                                 th { "直播地址" }
                                 th { "当前状态" }
+                                th { "本地文件" }
                                 th { "关联上传任务" }
                                 th { class: "actions", "操作" }
                             }
                         }
                         tbody {
                             if rows_view.is_empty() {
-                                tr { td { colspan: "6", class: "empty", "暂无下载任务" } }
+                                tr { td { colspan: "7", class: "empty", "暂无下载任务" } }
                             }
                             {
                                 rows_view.into_iter().map(|d| {
@@ -153,6 +180,7 @@ pub fn DownloadsPage(
                                     let status_class = status_class(&status_label);
                                     let can_stop = matches!(status_label.as_str(), "下载中" | "上传中" | "检测中");
                                     let can_clear_files = !matches!(status_label.as_str(), "下载中" | "上传中" | "检测中");
+                                    let file_size = format_bytes(d.recording_file_size_bytes);
                                     rsx! {
                                         tr {
                                             td {
@@ -176,6 +204,12 @@ pub fn DownloadsPage(
                                             }
                                             td {
                                                 span { class: "{status_class}", "{status_label}" }
+                                            }
+                                            td {
+                                                span {
+                                                    class: if d.recording_file_size_bytes == 0 { "muted" } else { "storage-size" },
+                                                    "{file_size}"
+                                                }
                                             }
                                             td {
                                                 if d.linked_upload_ids.is_empty() {
@@ -235,5 +269,23 @@ fn status_class(label: &str) -> &'static str {
         "已完成" => "tag tag-success",
         "已停止" => "tag tag-warning",
         _ => "tag",
+    }
+}
+
+fn format_bytes(bytes: u64) -> String {
+    const UNITS: &[&str] = &["B", "KB", "MB", "GB", "TB"];
+    let mut value = bytes as f64;
+    let mut unit_index = 0;
+    while value >= 1024.0 && unit_index + 1 < UNITS.len() {
+        value /= 1024.0;
+        unit_index += 1;
+    }
+
+    if unit_index == 0 {
+        format!("{bytes} B")
+    } else if value >= 10.0 {
+        format!("{value:.1} {}", UNITS[unit_index])
+    } else {
+        format!("{value:.2} {}", UNITS[unit_index])
     }
 }

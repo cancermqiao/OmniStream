@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use crate::{
     downloads_service::{
-        ScanRecordingFilesError, load_download_for_manual_upload,
+        ScanRecordingFilesError, load_download_for_manual_upload, recording_files_size_bytes,
         resolve_auto_cleanup_after_upload, resolve_manual_upload_configs,
         resolve_min_upload_file_size_bytes, scan_recording_files,
     },
@@ -31,15 +31,17 @@ pub async fn list_downloads(
 pub async fn list_downloads_service(
     state: &SharedState,
 ) -> Result<Vec<DownloadConfig>, (StatusCode, String)> {
-    match state.db.get_downloads().await {
-        Ok(mut downloads) => {
-            for d in &mut downloads {
-                d.current_status = Some(resolve_download_status(state, d));
-            }
-            Ok(downloads)
-        }
-        Err(e) => Err((StatusCode::INTERNAL_SERVER_ERROR, e.to_string())),
+    let mut downloads = state
+        .db
+        .get_downloads()
+        .await
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    for d in &mut downloads {
+        d.current_status = Some(resolve_download_status(state, d));
+        d.recording_file_size_bytes =
+            recording_files_size_bytes(&recording::recording_task_dir(&d.name)).await;
     }
+    Ok(downloads)
 }
 
 pub async fn add_download(
@@ -84,6 +86,7 @@ fn normalize_download_config(config: &mut DownloadConfig) {
         .filter(|id| !id.is_empty())
         .collect();
     config.current_status = None;
+    config.recording_file_size_bytes = 0;
 }
 
 async fn validate_download_config(
@@ -546,6 +549,7 @@ mod tests {
             linked_upload_ids: vec![" u1 ".to_string(), " ".to_string()],
             current_status: Some("下载中".to_string()),
             enabled: false,
+            recording_file_size_bytes: 123,
             ..Default::default()
         };
 
@@ -555,6 +559,7 @@ mod tests {
         assert_eq!(config.url, "https://example.com/live");
         assert_eq!(config.linked_upload_ids, vec!["u1"]);
         assert_eq!(config.current_status, None);
+        assert_eq!(config.recording_file_size_bytes, 0);
         assert!(!config.enabled);
     }
 

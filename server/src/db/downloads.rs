@@ -87,6 +87,7 @@ impl Db {
                     enabled: enabled != 0,
                     use_custom_recording_settings: use_custom_recording_settings != 0,
                     recording_settings,
+                    recording_file_size_bytes: 0,
                 }
             })
             .collect();

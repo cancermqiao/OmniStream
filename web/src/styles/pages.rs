@@ -37,7 +37,7 @@ pub const CSS: &str = r#"
 
 .stat-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(155px, 1fr));
   gap: 8px;
   min-width: 0;
 }
@@ -78,6 +78,23 @@ pub const CSS: &str = r#"
   margin: 5px 0 0;
   color: var(--soft);
   font-size: 11px;
+}
+
+.storage-meter {
+  width: 100%;
+  height: 7px;
+  margin: 8px 0 0;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.18);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.storage-meter-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #34c759 0%, #0a84ff 58%, #ff9f0a 86%, #ff453a 100%);
+  transition: width 0.28s ease;
 }
 
 .toolbar {

@@ -47,13 +47,15 @@ pub const CSS: &str = r#"
 .table-downloads th:nth-child(1),
 .table-downloads td:nth-child(1) { width: 42px; }
 .table-downloads th:nth-child(2),
-.table-downloads td:nth-child(2) { width: 13%; }
+.table-downloads td:nth-child(2) { width: 12%; }
 .table-downloads th:nth-child(3),
-.table-downloads td:nth-child(3) { width: 32%; }
+.table-downloads td:nth-child(3) { width: 28%; }
 .table-downloads th:nth-child(4),
-.table-downloads td:nth-child(4) { width: 10%; }
+.table-downloads td:nth-child(4) { width: 9%; }
 .table-downloads th:nth-child(5),
-.table-downloads td:nth-child(5) { width: 12%; }
+.table-downloads td:nth-child(5) { width: 9%; }
+.table-downloads th:nth-child(6),
+.table-downloads td:nth-child(6) { width: 10%; }
 
 .table-uploads th:nth-child(1),
 .table-uploads td:nth-child(1) { width: 42px; }
@@ -132,6 +134,13 @@ pub const CSS: &str = r#"
   font-size: 12px;
 }
 
+.storage-size {
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
 .text-ellipsis {
   display: block;
   max-width: 100%;
@@ -178,7 +187,7 @@ pub const CSS: &str = r#"
   }
 
   .table-downloads {
-    min-width: 760px;
+    min-width: 840px;
   }
 
   .table-uploads {

@@ -20,6 +20,7 @@ mod recording;
 mod router;
 mod settings;
 mod state;
+mod storage;
 mod storage_guard;
 mod task_launcher;
 mod tasks;

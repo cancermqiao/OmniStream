@@ -1,4 +1,4 @@
-use shared::{DownloadConfig, RecordingSettings, UploadAccount, UploadTemplate};
+use shared::{DownloadConfig, RecordingSettings, StorageStats, UploadAccount, UploadTemplate};
 
 #[derive(Clone, Copy, PartialEq)]
 pub enum Tab {
@@ -14,6 +14,7 @@ pub struct AppData {
     pub uploads: Vec<UploadTemplate>,
     pub accounts: Vec<UploadAccount>,
     pub recording_settings: RecordingSettings,
+    pub storage_stats: Option<StorageStats>,
 }
 
 pub use shared::QrStartResponse;

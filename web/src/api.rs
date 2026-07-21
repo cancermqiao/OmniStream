@@ -1,5 +1,7 @@
 use dioxus::prelude::*;
-use shared::{DownloadConfig, QrStartResponse, RecordingSettings, UploadAccount, UploadTemplate};
+use shared::{
+    DownloadConfig, QrStartResponse, RecordingSettings, StorageStats, UploadAccount, UploadTemplate,
+};
 
 #[cfg(feature = "server")]
 use std::sync::{Arc, OnceLock};
@@ -26,6 +28,7 @@ pub trait BackendApi: Send + Sync {
     ) -> Result<(), String>;
     async fn delete_account(&self, account_file: String) -> Result<(), String>;
     async fn fetch_recording_settings(&self) -> Result<RecordingSettings, String>;
+    async fn fetch_storage_stats(&self) -> Result<StorageStats, String>;
     async fn save_recording_settings(&self, settings: RecordingSettings) -> Result<(), String>;
     async fn trigger_manual_upload(&self, id: String) -> Result<String, String>;
 }
@@ -124,6 +127,11 @@ async fn server_fetch_recording_settings() -> ServerFnResult<RecordingSettings> 
 }
 
 #[server]
+async fn server_fetch_storage_stats() -> ServerFnResult<StorageStats> {
+    backend().cloned()?.fetch_storage_stats().await.map_err(server_error)
+}
+
+#[server]
 async fn server_save_recording_settings(settings: RecordingSettings) -> ServerFnResult<()> {
     backend().cloned()?.save_recording_settings(settings).await.map_err(server_error)
 }
@@ -191,6 +199,10 @@ pub async fn delete_account(_api_url: &str, account_file: String) {
 
 pub async fn fetch_recording_settings(_api_url: &str) -> Option<RecordingSettings> {
     server_fetch_recording_settings().await.ok()
+}
+
+pub async fn fetch_storage_stats(_api_url: &str) -> Option<StorageStats> {
+    server_fetch_storage_stats().await.ok()
 }
 
 pub async fn save_recording_settings(
