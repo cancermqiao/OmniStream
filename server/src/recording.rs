@@ -6,20 +6,25 @@ use chrono::Local;
 use shared::{TaskStatus, UploadConfig};
 use std::collections::HashSet;
 use std::path::PathBuf;
+use std::time::Duration;
+use tokio::time::sleep;
 
 use self::runtime::{RecorderRuntimeConfig, build_runtime_config};
 use self::segment::{
     SegmentLoopAction, decide_next_segment_action, record_segment, update_recorded_files,
 };
 use self::task_state::{
-    clear_task_handle, finish_recording_without_files, mark_related_errors_completed,
-    resolve_task_name, set_task_filename, set_task_status,
+    clear_task_handle, finish_recording_without_files, resolve_task_name, set_task_filename,
+    set_task_status,
 };
 use crate::{
     state::{RecorderHandle, SharedState},
     storage_guard::recording_storage_below_min_free_percent,
     uploader::UploadTarget,
 };
+
+const MAX_FILE_UPLOAD_ATTEMPTS: usize = 3;
+const RETRY_BACKOFF_SECS: &[u64] = &[30, 120];
 
 #[derive(Debug, Clone, Copy)]
 pub struct UploadRunOptions {
@@ -108,60 +113,196 @@ pub async fn run_upload(
     let target = UploadTarget::Bilibili;
     let uploader = target.create_uploader();
 
-    let mut all_success = true;
-    let mut error_msg = String::new();
+    let mut failed_files = Vec::new();
 
-    for (i, config) in configs.iter().enumerate() {
+    for (file_index, filename) in filenames.iter().enumerate() {
         tracing::info!(
-            "Task {} uploading config {}/{}: {:?}",
+            "Task {} uploading file {}/{}: {}",
             task_id,
-            i + 1,
-            configs.len(),
-            config.title
+            file_index + 1,
+            filenames.len(),
+            filename
         );
-        match uploader.upload(filenames.clone(), config, live_title.as_deref(), &task_name).await {
-            Ok(_) => tracing::info!("Task {} upload {} completed", task_id, i + 1),
-            Err(e) => {
+
+        let mut file_success = true;
+        let mut file_error = None;
+        for (config_index, config) in configs.iter().enumerate() {
+            tracing::info!(
+                "Task {} uploading file {}/{} with config {}/{}: file={}, title_template={:?}",
+                task_id,
+                file_index + 1,
+                filenames.len(),
+                config_index + 1,
+                configs.len(),
+                filename,
+                config.title
+            );
+
+            if let Err(e) = upload_file_with_retry(
+                uploader.as_ref(),
+                &task_id,
+                filename,
+                config,
+                live_title.as_deref(),
+                &task_name,
+                config_index,
+                configs.len(),
+            )
+            .await
+            {
                 tracing::error!(
-                    "Task {} upload {}/{} failed, task_name={}, files={:?}, title_template={:?}: {:?}",
+                    "Task {} upload failed for file {}/{} with config {}/{}: file={}, task_name={}, title_template={:?}: {:?}",
                     task_id,
-                    i + 1,
+                    file_index + 1,
+                    filenames.len(),
+                    config_index + 1,
                     configs.len(),
+                    filename,
                     task_name,
-                    filenames,
                     config.title,
                     e
                 );
-                all_success = false;
-                error_msg = format!("Upload {} failed: {:?}", i + 1, e);
+                file_success = false;
+                file_error = Some(format!(
+                    "file {} config {}/{} failed: {:?}",
+                    filename,
+                    config_index + 1,
+                    configs.len(),
+                    e
+                ));
+                break;
             }
+        }
+
+        if file_success {
+            tracing::info!(
+                "Task {} uploaded file {}/{} successfully for all configs: {}",
+                task_id,
+                file_index + 1,
+                filenames.len(),
+                filename
+            );
+
+            if options.auto_cleanup_after_upload {
+                cleanup_uploaded_file(&task_id, filename).await;
+            }
+        } else {
+            failed_files.push(file_error.unwrap_or_else(|| format!("file {} failed", filename)));
         }
     }
 
-    let final_status =
-        if all_success { TaskStatus::Completed } else { TaskStatus::Error(error_msg) };
-
-    if all_success && options.auto_cleanup_after_upload {
-        let mut uniq = HashSet::new();
-        for file in filenames {
-            if !uniq.insert(file.clone()) {
-                continue;
-            }
-            if let Err(e) = tokio::fs::remove_file(&file).await {
-                tracing::warn!("Task {} cleanup failed for {}: {}", task_id, file, e);
-            } else {
-                tracing::info!("Task {} cleaned up local file: {}", task_id, file);
-            }
-        }
-    }
+    let final_status = if failed_files.is_empty() {
+        TaskStatus::Completed
+    } else {
+        TaskStatus::Error(format!(
+            "Partial upload failed: {} file(s) failed; {}",
+            failed_files.len(),
+            failed_files.join("; ")
+        ))
+    };
 
     if update_status {
-        if all_success {
-            mark_related_errors_completed(&state, &task_id).await;
-        }
         set_task_status(&state, &task_id, final_status).await;
         clear_task_handle(&state, &task_id);
     }
+}
+
+async fn upload_file_with_retry(
+    uploader: &dyn crate::uploader::Uploader,
+    task_id: &str,
+    filename: &str,
+    config: &UploadConfig,
+    live_title: Option<&str>,
+    task_name: &str,
+    config_index: usize,
+    config_count: usize,
+) -> anyhow::Result<()> {
+    let mut last_error = None;
+
+    for attempt in 1..=MAX_FILE_UPLOAD_ATTEMPTS {
+        match uploader.upload(vec![filename.to_string()], config, live_title, task_name).await {
+            Ok(()) => {
+                tracing::info!(
+                    "Task {} uploaded file successfully: file={}, config={}/{}, attempt={}/{}",
+                    task_id,
+                    filename,
+                    config_index + 1,
+                    config_count,
+                    attempt,
+                    MAX_FILE_UPLOAD_ATTEMPTS
+                );
+                return Ok(());
+            }
+            Err(e) => {
+                let message = format!("{e:?}");
+                let transient = is_transient_upload_error(&message);
+                tracing::warn!(
+                    "Task {} upload attempt failed: file={}, config={}/{}, attempt={}/{}, transient={}, error={}",
+                    task_id,
+                    filename,
+                    config_index + 1,
+                    config_count,
+                    attempt,
+                    MAX_FILE_UPLOAD_ATTEMPTS,
+                    transient,
+                    message
+                );
+                last_error = Some(e);
+
+                if !transient || attempt == MAX_FILE_UPLOAD_ATTEMPTS {
+                    break;
+                }
+
+                let backoff = RETRY_BACKOFF_SECS
+                    .get(attempt.saturating_sub(1))
+                    .copied()
+                    .unwrap_or_else(|| *RETRY_BACKOFF_SECS.last().unwrap_or(&120));
+                tracing::warn!(
+                    "Task {} will retry upload after {}s: file={}, config={}/{}, next_attempt={}",
+                    task_id,
+                    backoff,
+                    filename,
+                    config_index + 1,
+                    config_count,
+                    attempt + 1
+                );
+                sleep(Duration::from_secs(backoff)).await;
+            }
+        }
+    }
+
+    Err(last_error.unwrap_or_else(|| anyhow::anyhow!("upload failed without error detail")))
+}
+
+async fn cleanup_uploaded_file(task_id: &str, file: &str) {
+    if let Err(e) = tokio::fs::remove_file(file).await {
+        tracing::warn!("Task {} cleanup failed for {}: {}", task_id, file, e);
+    } else {
+        tracing::info!("Task {} cleaned up uploaded local file: {}", task_id, file);
+    }
+}
+
+fn is_transient_upload_error(message: &str) -> bool {
+    let message = message.to_ascii_lowercase();
+    [
+        "500",
+        "502",
+        "503",
+        "504",
+        "gateway time-out",
+        "gateway timeout",
+        "timeout",
+        "timed out",
+        "error sending request",
+        "connection reset",
+        "connection closed",
+        "connection refused",
+        "connection aborted",
+        "temporarily unavailable",
+        "network",
+    ]
+    .iter()
+    .any(|needle| message.contains(needle))
 }
 
 async fn prepare_upload_files(
@@ -419,7 +560,7 @@ fn sanitize_for_filename(raw: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{prepare_upload_files, quality_for_url};
+    use super::{is_transient_upload_error, prepare_upload_files, quality_for_url};
     use shared::PlatformQualityConfig;
     use uuid::Uuid;
 
@@ -486,5 +627,20 @@ mod tests {
         assert!(small.exists());
 
         tokio::fs::remove_dir_all(&dir).await.expect("cleanup temp dir");
+    }
+
+    #[test]
+    fn transient_upload_error_detects_temporary_bilibili_failures() {
+        assert!(is_transient_upload_error("HTTP status server error (504 Gateway Time-out)"));
+        assert!(is_transient_upload_error(
+            "error sending request for url (https://upos-sz-upcdnbda2.bilivideo.com)"
+        ));
+        assert!(is_transient_upload_error("connection reset by peer"));
+    }
+
+    #[test]
+    fn transient_upload_error_ignores_permanent_config_failures() {
+        assert!(!is_transient_upload_error("account_file is required"));
+        assert!(!is_transient_upload_error("copyright must be 1 (Original) or 2 (Reprint)"));
     }
 }
