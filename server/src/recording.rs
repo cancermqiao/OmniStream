@@ -23,7 +23,7 @@ use crate::{
     uploader::UploadTarget,
 };
 
-const MAX_FILE_UPLOAD_ATTEMPTS: usize = 3;
+const MAX_BATCH_UPLOAD_ATTEMPTS: usize = 3;
 const RETRY_BACKOFF_SECS: &[u64] = &[30, 120];
 
 #[derive(Debug, Clone, Copy)]
@@ -113,92 +113,58 @@ pub async fn run_upload(
     let target = UploadTarget::Bilibili;
     let uploader = target.create_uploader();
 
-    let mut failed_files = Vec::new();
-
-    for (file_index, filename) in filenames.iter().enumerate() {
+    let mut all_success = true;
+    let mut error_msg = String::new();
+    for (config_index, config) in configs.iter().enumerate() {
         tracing::info!(
-            "Task {} uploading file {}/{}: {}",
+            "Task {} uploading {} files as one multi-part archive with config {}/{}: title_template={:?}",
             task_id,
-            file_index + 1,
             filenames.len(),
-            filename
+            config_index + 1,
+            configs.len(),
+            config.title
         );
 
-        let mut file_success = true;
-        let mut file_error = None;
-        for (config_index, config) in configs.iter().enumerate() {
-            tracing::info!(
-                "Task {} uploading file {}/{} with config {}/{}: file={}, title_template={:?}",
+        if let Err(e) = upload_batch_with_retry(
+            uploader.as_ref(),
+            &task_id,
+            &filenames,
+            config,
+            live_title.as_deref(),
+            &task_name,
+            config_index,
+            configs.len(),
+        )
+        .await
+        {
+            tracing::error!(
+                "Task {} multi-part upload failed for config {}/{}: task_name={}, files={:?}, title_template={:?}: {:?}",
                 task_id,
-                file_index + 1,
-                filenames.len(),
                 config_index + 1,
                 configs.len(),
-                filename,
-                config.title
+                task_name,
+                filenames,
+                config.title,
+                e
             );
-
-            if let Err(e) = upload_file_with_retry(
-                uploader.as_ref(),
-                &task_id,
-                filename,
-                config,
-                live_title.as_deref(),
-                &task_name,
-                config_index,
+            all_success = false;
+            error_msg = format!(
+                "Multi-part upload config {}/{} failed: {:?}",
+                config_index + 1,
                 configs.len(),
-            )
-            .await
-            {
-                tracing::error!(
-                    "Task {} upload failed for file {}/{} with config {}/{}: file={}, task_name={}, title_template={:?}: {:?}",
-                    task_id,
-                    file_index + 1,
-                    filenames.len(),
-                    config_index + 1,
-                    configs.len(),
-                    filename,
-                    task_name,
-                    config.title,
-                    e
-                );
-                file_success = false;
-                file_error = Some(format!(
-                    "file {} config {}/{} failed: {:?}",
-                    filename,
-                    config_index + 1,
-                    configs.len(),
-                    e
-                ));
-                break;
-            }
-        }
-
-        if file_success {
-            tracing::info!(
-                "Task {} uploaded file {}/{} successfully for all configs: {}",
-                task_id,
-                file_index + 1,
-                filenames.len(),
-                filename
+                e
             );
-
-            if options.auto_cleanup_after_upload {
-                cleanup_uploaded_file(&task_id, filename).await;
-            }
-        } else {
-            failed_files.push(file_error.unwrap_or_else(|| format!("file {} failed", filename)));
+            break;
         }
     }
 
-    let final_status = if failed_files.is_empty() {
+    let final_status = if all_success {
+        if options.auto_cleanup_after_upload {
+            cleanup_uploaded_files(&task_id, &filenames).await;
+        }
         TaskStatus::Completed
     } else {
-        TaskStatus::Error(format!(
-            "Partial upload failed: {} file(s) failed; {}",
-            failed_files.len(),
-            failed_files.join("; ")
-        ))
+        TaskStatus::Error(error_msg)
     };
 
     if update_status {
@@ -207,10 +173,10 @@ pub async fn run_upload(
     }
 }
 
-async fn upload_file_with_retry(
+async fn upload_batch_with_retry(
     uploader: &dyn crate::uploader::Uploader,
     task_id: &str,
-    filename: &str,
+    filenames: &[String],
     config: &UploadConfig,
     live_title: Option<&str>,
     task_name: &str,
@@ -219,17 +185,17 @@ async fn upload_file_with_retry(
 ) -> anyhow::Result<()> {
     let mut last_error = None;
 
-    for attempt in 1..=MAX_FILE_UPLOAD_ATTEMPTS {
-        match uploader.upload(vec![filename.to_string()], config, live_title, task_name).await {
+    for attempt in 1..=MAX_BATCH_UPLOAD_ATTEMPTS {
+        match uploader.upload(filenames.to_vec(), config, live_title, task_name).await {
             Ok(()) => {
                 tracing::info!(
-                    "Task {} uploaded file successfully: file={}, config={}/{}, attempt={}/{}",
+                    "Task {} submitted multi-part upload successfully: file_count={}, config={}/{}, attempt={}/{}",
                     task_id,
-                    filename,
+                    filenames.len(),
                     config_index + 1,
                     config_count,
                     attempt,
-                    MAX_FILE_UPLOAD_ATTEMPTS
+                    MAX_BATCH_UPLOAD_ATTEMPTS
                 );
                 return Ok(());
             }
@@ -237,19 +203,19 @@ async fn upload_file_with_retry(
                 let message = format!("{e:?}");
                 let transient = is_transient_upload_error(&message);
                 tracing::warn!(
-                    "Task {} upload attempt failed: file={}, config={}/{}, attempt={}/{}, transient={}, error={}",
+                    "Task {} multi-part upload attempt failed: file_count={}, config={}/{}, attempt={}/{}, transient={}, error={}",
                     task_id,
-                    filename,
+                    filenames.len(),
                     config_index + 1,
                     config_count,
                     attempt,
-                    MAX_FILE_UPLOAD_ATTEMPTS,
+                    MAX_BATCH_UPLOAD_ATTEMPTS,
                     transient,
                     message
                 );
                 last_error = Some(e);
 
-                if !transient || attempt == MAX_FILE_UPLOAD_ATTEMPTS {
+                if !transient || attempt == MAX_BATCH_UPLOAD_ATTEMPTS {
                     break;
                 }
 
@@ -258,10 +224,10 @@ async fn upload_file_with_retry(
                     .copied()
                     .unwrap_or_else(|| *RETRY_BACKOFF_SECS.last().unwrap_or(&120));
                 tracing::warn!(
-                    "Task {} will retry upload after {}s: file={}, config={}/{}, next_attempt={}",
+                    "Task {} will retry multi-part upload after {}s: file_count={}, config={}/{}, next_attempt={}",
                     task_id,
                     backoff,
-                    filename,
+                    filenames.len(),
                     config_index + 1,
                     config_count,
                     attempt + 1
@@ -274,11 +240,21 @@ async fn upload_file_with_retry(
     Err(last_error.unwrap_or_else(|| anyhow::anyhow!("upload failed without error detail")))
 }
 
-async fn cleanup_uploaded_file(task_id: &str, file: &str) {
-    if let Err(e) = tokio::fs::remove_file(file).await {
-        tracing::warn!("Task {} cleanup failed for {}: {}", task_id, file, e);
-    } else {
-        tracing::info!("Task {} cleaned up uploaded local file: {}", task_id, file);
+async fn cleanup_uploaded_files(task_id: &str, filenames: &[String]) {
+    let mut unique_files = HashSet::new();
+    for file in filenames {
+        if !unique_files.insert(file) {
+            continue;
+        }
+        if let Err(e) = tokio::fs::remove_file(file).await {
+            tracing::warn!("Task {} cleanup failed for {}: {}", task_id, file, e);
+        } else {
+            tracing::info!(
+                "Task {} cleaned up local file after multi-part submission: {}",
+                task_id,
+                file
+            );
+        }
     }
 }
 
