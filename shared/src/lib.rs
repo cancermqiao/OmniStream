@@ -178,6 +178,8 @@ pub struct PlatformQualityConfig {
     pub tiktok: String,
     #[serde(default = "default_quality")]
     pub douyin: String,
+    #[serde(default = "default_quality")]
+    pub xiaohongshu: String,
     pub twitch: String,
     pub youtube: String,
     #[serde(default = "default_quality")]
@@ -197,6 +199,7 @@ impl Default for PlatformQualityConfig {
             huya: "best".to_string(),
             tiktok: "best".to_string(),
             douyin: "best".to_string(),
+            xiaohongshu: "best".to_string(),
             twitch: "best".to_string(),
             youtube: "best".to_string(),
             kick: "best".to_string(),
@@ -266,7 +269,7 @@ mod tests {
     }
 
     #[test]
-    fn platform_quality_config_deserialize_defaults_kick_quality() {
+    fn platform_quality_config_deserialize_defaults_new_platform_qualities() {
         let json = r#"{
             "bilibili":"best",
             "douyu":"best",
@@ -280,6 +283,7 @@ mod tests {
             serde_json::from_str(json).expect("valid quality config json");
 
         assert_eq!(config.kick, "best");
+        assert_eq!(config.xiaohongshu, "best");
     }
 
     #[test]

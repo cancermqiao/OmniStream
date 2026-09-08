@@ -21,6 +21,7 @@ pub fn SettingsPage(
     let mut huya = use_signal(|| settings.quality.huya.clone());
     let mut tiktok = use_signal(|| settings.quality.tiktok.clone());
     let mut douyin = use_signal(|| settings.quality.douyin.clone());
+    let mut xiaohongshu = use_signal(|| settings.quality.xiaohongshu.clone());
     let mut twitch = use_signal(|| settings.quality.twitch.clone());
     let mut youtube = use_signal(|| settings.quality.youtube.clone());
     let mut kick = use_signal(|| settings.quality.kick.clone());
@@ -108,6 +109,7 @@ pub fn SettingsPage(
                     QualitySelect { label: "虎牙 画质".to_string(), value: huya, on_change: move |v| huya.set(v) }
                     QualitySelect { label: "TikTok 画质".to_string(), value: tiktok, on_change: move |v| tiktok.set(v) }
                     QualitySelect { label: "抖音 画质".to_string(), value: douyin, on_change: move |v| douyin.set(v) }
+                    QualitySelect { label: "小红书 画质".to_string(), value: xiaohongshu, on_change: move |v| xiaohongshu.set(v) }
                     QualitySelect { label: "Twitch 画质".to_string(), value: twitch, on_change: move |v| twitch.set(v) }
                     QualitySelect { label: "YouTube 画质".to_string(), value: youtube, on_change: move |v| youtube.set(v) }
                     QualitySelect { label: "Kick 画质".to_string(), value: kick, on_change: move |v| kick.set(v) }
@@ -195,6 +197,7 @@ pub fn SettingsPage(
                                     huya: huya(),
                                     tiktok: tiktok(),
                                     douyin: douyin(),
+                                    xiaohongshu: xiaohongshu(),
                                     twitch: twitch(),
                                     youtube: youtube(),
                                     kick: kick(),

@@ -13,6 +13,7 @@ pub enum LivePlatform {
     Huya,
     Tiktok,
     Douyin,
+    Xiaohongshu,
     Twitch,
     Youtube,
     Kick,
@@ -31,6 +32,7 @@ pub async fn resolve_stream(url: &str, quality: &str) -> Result<Option<ResolvedS
         LivePlatform::Bilibili => resolve_bilibili(url, quality).await,
         LivePlatform::Douyu => resolve_douyu(url).await.map(Some),
         LivePlatform::Douyin => resolve_douyin(url, quality).await.map(Some),
+        LivePlatform::Xiaohongshu => resolve_xiaohongshu(url).await,
         _ => Ok(None),
     }
 }
@@ -56,6 +58,13 @@ pub fn detect_platform(url: &str) -> LivePlatform {
     }
     if host.ends_with("douyin.com") {
         return LivePlatform::Douyin;
+    }
+    if host == "xhslink.com"
+        || host.ends_with(".xhslink.com")
+        || host == "xiaohongshu.com"
+        || host.ends_with(".xiaohongshu.com")
+    {
+        return LivePlatform::Xiaohongshu;
     }
     if host.ends_with("twitch.tv") {
         return LivePlatform::Twitch;
@@ -412,12 +421,82 @@ fn unescape_json_url(raw: &str) -> String {
         .to_string()
 }
 
+async fn resolve_xiaohongshu(url: &str) -> Result<Option<ResolvedStream>> {
+    let response = Client::builder()
+        .user_agent("ios/7.830 (ios 17.0; ; iPhone 15 (A2846/A3089/A3090/A3092))")
+        .build()?
+        .get(url)
+        .header("xy-common-params", "platform=iOS&sid=session.1722166379345546829388")
+        .header("referer", "https://app.xhs.cn/")
+        .send()
+        .await?
+        .error_for_status()?;
+
+    extract_xiaohongshu_stream(&response.text().await?)
+}
+
+fn extract_xiaohongshu_stream(html: &str) -> Result<Option<ResolvedStream>> {
+    let state_regex =
+        Regex::new(r#"(?s)<script[^>]*>\s*window\.__INITIAL_STATE__\s*=\s*(.*?)\s*</script>"#)?;
+    let Some(raw_state) =
+        state_regex.captures(html).and_then(|captures| captures.get(1)).map(|v| v.as_str())
+    else {
+        return Err(anyhow!("Xiaohongshu page does not contain initial live state"));
+    };
+
+    let undefined_regex = Regex::new(r#"(?P<prefix>[:,\[]\s*)undefined(?P<suffix>\s*[,}\]])"#)?;
+    let mut normalized = raw_state.trim().trim_end_matches(';').to_string();
+    loop {
+        let next = undefined_regex.replace_all(&normalized, "${prefix}null${suffix}").into_owned();
+        if next == normalized {
+            break;
+        }
+        normalized = next;
+    }
+    let state: Value = serde_json::from_str(&normalized)
+        .map_err(|e| anyhow!("Failed to parse Xiaohongshu initial live state: {e}"))?;
+
+    let Some(live_stream) = state.get("liveStream") else {
+        return Ok(None);
+    };
+    if live_stream.get("liveStatus").and_then(Value::as_str) != Some("success") {
+        return Ok(None);
+    }
+
+    let room_info = live_stream
+        .get("roomData")
+        .and_then(|v| v.get("roomInfo"))
+        .ok_or_else(|| anyhow!("Xiaohongshu live state is missing room info"))?;
+    let title =
+        room_info.get("roomTitle").and_then(Value::as_str).and_then(|v| non_empty(v.to_string()));
+    if title.as_deref().is_some_and(|v| v.contains("回放")) {
+        return Ok(None);
+    }
+
+    let deeplink = room_info
+        .get("deeplink")
+        .and_then(Value::as_str)
+        .ok_or_else(|| anyhow!("Xiaohongshu room info is missing live deeplink"))?;
+    let input_url = Url::parse(deeplink)
+        .ok()
+        .and_then(|url| {
+            url.query_pairs()
+                .find(|(key, _)| key.eq_ignore_ascii_case("flvUrl"))
+                .map(|(_, value)| value.into_owned())
+        })
+        .filter(|value| value.starts_with("http://") || value.starts_with("https://"))
+        .ok_or_else(|| anyhow!("Xiaohongshu live deeplink does not contain a playable FLV URL"))?;
+
+    Ok(Some(ResolvedStream { input_url, title, direct_input: true }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
         LivePlatform, ResolvedStream, bilibili_quality_qn, detect_platform,
-        extract_douyin_hls_streams, non_empty_json_string, parse_bilibili_room_id_from_url,
-        resolve_stream, select_bilibili_stream_url, select_douyin_stream,
+        extract_douyin_hls_streams, extract_xiaohongshu_stream, non_empty_json_string,
+        parse_bilibili_room_id_from_url, resolve_stream, select_bilibili_stream_url,
+        select_douyin_stream,
     };
     use crate::checker::STREAMLINK_PATH;
     use serde_json::json;
@@ -434,6 +513,11 @@ mod tests {
             LivePlatform::Tiktok
         );
         assert_eq!(detect_platform("https://live.douyin.com/393646574978"), LivePlatform::Douyin);
+        assert_eq!(
+            detect_platform("https://www.xiaohongshu.com/user/profile/abc?host_id=abc"),
+            LivePlatform::Xiaohongshu
+        );
+        assert_eq!(detect_platform("http://xhslink.com/example"), LivePlatform::Xiaohongshu);
         assert_eq!(detect_platform("https://www.twitch.tv/seucreysonreborn"), LivePlatform::Twitch);
         assert_eq!(detect_platform("https://kick.com/topson"), LivePlatform::Kick);
     }
@@ -512,6 +596,36 @@ mod tests {
             select_douyin_stream(&streams, "worst").as_deref(),
             Some("http://pull-hls-l11.douyincdn.com/stage/ld.m3u8?expire=1&sign=c")
         );
+    }
+
+    #[test]
+    fn extracts_xiaohongshu_live_stream_from_initial_state() {
+        let html = r#"
+            <html><script>window.__INITIAL_STATE__={
+                "liveStream":{
+                    "liveStatus":"success",
+                    "roomData":{"roomInfo":{
+                        "roomTitle":"测试直播",
+                        "deeplink":"xhsdiscover://live?host_nickname=test&flvUrl=https%3A%2F%2Flive-source-play.xhscdn.com%2Flive%2Froom.flv%3Ftoken%3Dabc"
+                    }}
+                },
+                "unused":undefined,
+                "anotherUnused":undefined
+            };</script></html>
+        "#;
+
+        let stream =
+            extract_xiaohongshu_stream(html).expect("valid initial state").expect("live stream");
+        assert_eq!(stream.title.as_deref(), Some("测试直播"));
+        assert_eq!(stream.input_url, "https://live-source-play.xhscdn.com/live/room.flv?token=abc");
+        assert!(stream.direct_input);
+    }
+
+    #[test]
+    fn treats_xiaohongshu_replay_as_offline() {
+        let html = r#"<script>window.__INITIAL_STATE__={"liveStream":{"liveStatus":"success","roomData":{"roomInfo":{"roomTitle":"精彩回放","deeplink":"xhsdiscover://live?flvUrl=https%3A%2F%2Flive-source-play.xhscdn.com%2Flive%2Froom.flv"}}}}</script>"#;
+
+        assert!(extract_xiaohongshu_stream(html).expect("valid initial state").is_none());
     }
 
     #[tokio::test]

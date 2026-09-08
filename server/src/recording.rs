@@ -495,6 +495,9 @@ fn quality_for_url(url: &str, quality: &shared::PlatformQualityConfig) -> String
     if u.contains("douyin.com") {
         return quality.douyin.clone();
     }
+    if u.contains("xiaohongshu.com") || u.contains("xhslink.com") {
+        return quality.xiaohongshu.clone();
+    }
     if u.contains("twitch.tv") {
         return quality.twitch.clone();
     }
@@ -548,6 +551,7 @@ mod tests {
             huya: "huya".to_string(),
             tiktok: "tiktok".to_string(),
             douyin: "douyin".to_string(),
+            xiaohongshu: "xiaohongshu".to_string(),
             twitch: "twitch".to_string(),
             youtube: "youtube".to_string(),
             kick: "kick".to_string(),
@@ -561,6 +565,11 @@ mod tests {
             "tiktok"
         );
         assert_eq!(quality_for_url("https://live.douyin.com/393646574978", &quality), "douyin");
+        assert_eq!(
+            quality_for_url("https://www.xiaohongshu.com/user/profile/abc", &quality),
+            "xiaohongshu"
+        );
+        assert_eq!(quality_for_url("http://xhslink.com/example", &quality), "xiaohongshu");
         assert_eq!(quality_for_url("https://www.twitch.tv/seucreysonreborn", &quality), "twitch");
         assert_eq!(quality_for_url("https://kick.com/topson", &quality), "kick");
     }

@@ -337,6 +337,8 @@ fn build_recorder_command(recorder: &RecorderCommand, output: &str) -> (Command,
 fn ffmpeg_headers_for_input(input_url: &str) -> &'static str {
     if is_bilibili_cdn_url(input_url) {
         "Referer: https://live.bilibili.com/\r\nUser-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36\r\n"
+    } else if is_xiaohongshu_cdn_url(input_url) {
+        "Referer: https://app.xhs.cn/\r\nUser-Agent: ios/7.830 (ios 17.0; ; iPhone 15 (A2846/A3089/A3090/A3092))\r\n"
     } else {
         "User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36\r\n"
     }
@@ -347,6 +349,10 @@ fn is_bilibili_cdn_url(input_url: &str) -> bool {
         || input_url.contains("bilivideo.cn")
         || input_url.contains("bilibili.com")
         || input_url.contains("biliapi.net")
+}
+
+fn is_xiaohongshu_cdn_url(input_url: &str) -> bool {
+    input_url.contains("xhscdn.com")
 }
 
 fn spawn_recorder_output_collector<R>(
@@ -479,7 +485,9 @@ pub(super) async fn decide_next_segment_action(
 
 #[cfg(test)]
 mod tests {
-    use super::{ffmpeg_headers_for_input, is_bilibili_cdn_url, is_disk_full_message};
+    use super::{
+        ffmpeg_headers_for_input, is_bilibili_cdn_url, is_disk_full_message, is_xiaohongshu_cdn_url,
+    };
 
     #[test]
     fn ffmpeg_headers_include_bilibili_referer_for_bilibili_cdn() {
@@ -496,6 +504,16 @@ mod tests {
 
         assert!(!headers.contains("Referer: https://live.bilibili.com/"));
         assert!(headers.contains("User-Agent: Mozilla/5.0"));
+    }
+
+    #[test]
+    fn ffmpeg_headers_include_xiaohongshu_referer_for_xhs_cdn() {
+        let input_url = "https://live-source-play.xhscdn.com/live/room.flv";
+        let headers = ffmpeg_headers_for_input(input_url);
+
+        assert!(is_xiaohongshu_cdn_url(input_url));
+        assert!(headers.contains("Referer: https://app.xhs.cn/"));
+        assert!(headers.contains("User-Agent: ios/7.830"));
     }
 
     #[test]

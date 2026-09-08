@@ -33,6 +33,7 @@ pub fn DownloadModal(
     let mut q_huya = use_signal(|| base_settings.quality.huya.clone());
     let mut q_tiktok = use_signal(|| base_settings.quality.tiktok.clone());
     let mut q_douyin = use_signal(|| base_settings.quality.douyin.clone());
+    let mut q_xiaohongshu = use_signal(|| base_settings.quality.xiaohongshu.clone());
     let mut q_twitch = use_signal(|| base_settings.quality.twitch.clone());
     let mut q_youtube = use_signal(|| base_settings.quality.youtube.clone());
     let mut q_kick = use_signal(|| base_settings.quality.kick.clone());
@@ -150,6 +151,7 @@ pub fn DownloadModal(
                         QualitySelect { label: "虎牙 画质".to_string(), value: q_huya, on_change: move |v| q_huya.set(v) }
                         QualitySelect { label: "TikTok 画质".to_string(), value: q_tiktok, on_change: move |v| q_tiktok.set(v) }
                         QualitySelect { label: "抖音 画质".to_string(), value: q_douyin, on_change: move |v| q_douyin.set(v) }
+                        QualitySelect { label: "小红书 画质".to_string(), value: q_xiaohongshu, on_change: move |v| q_xiaohongshu.set(v) }
                         QualitySelect { label: "Twitch 画质".to_string(), value: q_twitch, on_change: move |v| q_twitch.set(v) }
                         QualitySelect { label: "YouTube 画质".to_string(), value: q_youtube, on_change: move |v| q_youtube.set(v) }
                         QualitySelect { label: "Kick 画质".to_string(), value: q_kick, on_change: move |v| q_kick.set(v) }
@@ -230,6 +232,7 @@ pub fn DownloadModal(
                                     huya: q_huya(),
                                     tiktok: q_tiktok(),
                                     douyin: q_douyin(),
+                                    xiaohongshu: q_xiaohongshu(),
                                     twitch: q_twitch(),
                                     youtube: q_youtube(),
                                     kick: q_kick(),

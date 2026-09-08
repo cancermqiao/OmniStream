@@ -66,6 +66,7 @@ pub(crate) fn sanitize_recording_settings(
     normalize_quality(&mut settings.quality.huya);
     normalize_quality(&mut settings.quality.tiktok);
     normalize_quality(&mut settings.quality.douyin);
+    normalize_quality(&mut settings.quality.xiaohongshu);
     normalize_quality(&mut settings.quality.twitch);
     normalize_quality(&mut settings.quality.youtube);
     normalize_quality(&mut settings.quality.kick);
