@@ -6,7 +6,7 @@ use crate::components::{
     AccountsPage, DownloadModal, DownloadsPage, SettingsPage, TabItem, UploadModal, UploadsPage,
 };
 use crate::models::{AppData, QrStartResponse, Tab};
-#[cfg(target_arch = "wasm32")]
+#[cfg(any(target_arch = "wasm32", feature = "desktop", feature = "mobile"))]
 use crate::sleep_ms;
 use crate::styles::theme_css;
 
@@ -31,7 +31,7 @@ pub fn App() -> Element {
     let mut manual_upload_message = use_signal::<Option<String>>(|| None);
     let mut manual_upload_error = use_signal(|| false);
 
-    #[cfg(target_arch = "wasm32")]
+    #[cfg(any(target_arch = "wasm32", feature = "desktop", feature = "mobile"))]
     {
         use_future(move || async move {
             let mut account_tick = 0u8;
@@ -503,6 +503,18 @@ pub fn App() -> Element {
 }
 
 pub fn api_url() -> &'static str {
+    #[cfg(any(feature = "desktop", feature = "mobile"))]
+    {
+        static API_URL: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+        API_URL
+            .get_or_init(|| {
+                std::env::var("BILIUP_API_URL").unwrap_or_else(|_| {
+                    option_env!("BILIUP_API_URL").unwrap_or(default_api_url()).to_string()
+                })
+            })
+            .as_str()
+    }
+    #[cfg(not(any(feature = "desktop", feature = "mobile")))]
     option_env!("BILIUP_API_URL").unwrap_or(default_api_url())
 }
 
