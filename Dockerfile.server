@@ -1,4 +1,4 @@
-FROM rust:1.93-bookworm AS builder
+FROM rust:1.94-bookworm AS builder
 WORKDIR /build
 
 # GitHub buildx runners are memory constrained, especially for multi-arch builds.
@@ -19,7 +19,7 @@ COPY shared/src shared/src
 COPY web/src web/src
 COPY server/src server/src
 
-RUN cargo build --release -p server --bin server
+RUN cargo build --locked --release -p server --bin server
 RUN cd web && dx build --platform web --release
 
 FROM debian:bookworm-slim
