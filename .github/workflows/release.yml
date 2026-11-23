@@ -38,17 +38,23 @@ jobs:
       - name: Cache Cargo
         uses: Swatinem/rust-cache@v2
 
+      - name: Install cargo-deny
+        uses: taiki-e/install-action@cargo-deny
+
+      - name: Cargo deny (advisories/bans/sources)
+        run: cargo deny --locked check advisories bans sources
+
       - name: Format Check
         run: cargo fmt --all -- --check
 
       - name: Test
-        run: cargo test --workspace --all-targets
+        run: cargo test --locked --workspace --all-targets
 
       - name: Clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --locked --workspace --all-targets -- -D warnings
 
       - name: Check Web WASM build target
-        run: cargo check -p app --target wasm32-unknown-unknown
+        run: cargo check --locked -p app --target wasm32-unknown-unknown
 
   web-static:
     needs: quality-gate
@@ -112,7 +118,7 @@ jobs:
         run: cargo install dioxus-cli --locked
 
       - name: Build server binary
-        run: cargo build --release -p server --bin server
+        run: cargo build --locked --release -p server --bin server
 
       - name: Build Web
         working-directory: web
@@ -145,24 +151,28 @@ jobs:
         include:
           - name: desktop-linux-amd64
             runner: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
             binary: app
             app_binary: OmniStream
             archive_ext: tar.gz
             platform_label: Linux x64
           - name: desktop-macos-amd64
-            runner: macos-13
+            runner: macos-15-intel
+            target: x86_64-apple-darwin
             binary: app
             app_binary: OmniStream
             archive_ext: zip
             platform_label: macOS Intel
           - name: desktop-macos-arm64
-            runner: macos-14
+            runner: macos-15
+            target: aarch64-apple-darwin
             binary: app
             app_binary: OmniStream
             archive_ext: zip
             platform_label: macOS Apple Silicon
           - name: desktop-windows-amd64
             runner: windows-latest
+            target: x86_64-pc-windows-msvc
             binary: app.exe
             app_binary: OmniStream.exe
             archive_ext: zip
@@ -181,12 +191,14 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
 
       - name: Cache Cargo
         uses: Swatinem/rust-cache@v2
 
       - name: Build Desktop
-        run: cargo build --release -p app --no-default-features --features desktop
+        run: cargo build --locked --release --target ${{ matrix.target }} -p app --no-default-features --features desktop
 
       - name: Package Desktop
         shell: bash
@@ -195,7 +207,7 @@ jobs:
           mkdir -p release-assets
           bundle="omnistream-${{ matrix.name }}"
           mkdir -p "release-assets/$bundle"
-          cp "target/release/${{ matrix.binary }}" "release-assets/$bundle/${{ matrix.app_binary }}"
+          cp "target/${{ matrix.target }}/release/${{ matrix.binary }}" "release-assets/$bundle/${{ matrix.app_binary }}"
           chmod +x "release-assets/$bundle/${{ matrix.app_binary }}" || true
           cat > "release-assets/$bundle/README.txt" <<'EOF'
           OmniStream Desktop
