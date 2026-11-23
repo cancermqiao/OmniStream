@@ -6,6 +6,8 @@ use serde_json::Value;
 use std::time::{SystemTime, UNIX_EPOCH};
 use url::Url;
 
+mod ximalaya;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LivePlatform {
     Bilibili,
@@ -14,6 +16,7 @@ pub enum LivePlatform {
     Tiktok,
     Douyin,
     Xiaohongshu,
+    Ximalaya,
     Twitch,
     Youtube,
     Kick,
@@ -33,6 +36,7 @@ pub async fn resolve_stream(url: &str, quality: &str) -> Result<Option<ResolvedS
         LivePlatform::Douyu => resolve_douyu(url).await.map(Some),
         LivePlatform::Douyin => resolve_douyin(url, quality).await.map(Some),
         LivePlatform::Xiaohongshu => resolve_xiaohongshu(url).await,
+        LivePlatform::Ximalaya => ximalaya::resolve(url).await,
         _ => Ok(None),
     }
 }
@@ -68,6 +72,9 @@ pub fn detect_platform(url: &str) -> LivePlatform {
     }
     if host.ends_with("twitch.tv") {
         return LivePlatform::Twitch;
+    }
+    if host == "ximalaya.com" || host.ends_with(".ximalaya.com") {
+        return LivePlatform::Ximalaya;
     }
     if host.ends_with("youtube.com") || host == "youtu.be" {
         return LivePlatform::Youtube;
@@ -520,6 +527,11 @@ mod tests {
         assert_eq!(detect_platform("http://xhslink.com/example"), LivePlatform::Xiaohongshu);
         assert_eq!(detect_platform("https://www.twitch.tv/seucreysonreborn"), LivePlatform::Twitch);
         assert_eq!(detect_platform("https://kick.com/topson"), LivePlatform::Kick);
+        assert_eq!(detect_platform("https://m.ximalaya.com/live/room/412"), LivePlatform::Ximalaya);
+        assert_eq!(
+            detect_platform("https://evilximalaya.com/live/room/412"),
+            LivePlatform::Unknown
+        );
     }
 
     #[test]

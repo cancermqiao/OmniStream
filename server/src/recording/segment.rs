@@ -7,7 +7,9 @@ use tokio::time::{Instant, MissedTickBehavior, interval, sleep};
 
 use super::{RecorderRuntimeConfig, prepare_segment_file, resolve_task_name, stop_segment_process};
 use crate::{
-    checker::STREAMLINK_PATH, platform::resolve_stream, state::SharedState,
+    checker::STREAMLINK_PATH,
+    platform::{LivePlatform, detect_platform, resolve_stream},
+    state::SharedState,
     storage_guard::recording_storage_below_min_free_percent,
 };
 
@@ -68,7 +70,10 @@ pub(super) async fn record_segment(
                 stream.input_url
             );
             if stream.direct_input {
-                RecorderCommand::Ffmpeg { input_url: stream.input_url }
+                RecorderCommand::Ffmpeg {
+                    input_url: stream.input_url,
+                    fragment_by_duration: detect_platform(url) == LivePlatform::Ximalaya,
+                }
             } else {
                 RecorderCommand::Streamlink {
                     input_url: stream.input_url,
@@ -273,14 +278,14 @@ fn is_disk_full_message(message: &str) -> bool {
 
 enum RecorderCommand {
     Streamlink { input_url: String, quality: String },
-    Ffmpeg { input_url: String },
+    Ffmpeg { input_url: String, fragment_by_duration: bool },
 }
 
 impl RecorderCommand {
     fn input_url(&self) -> &str {
         match self {
             RecorderCommand::Streamlink { input_url, .. }
-            | RecorderCommand::Ffmpeg { input_url } => input_url,
+            | RecorderCommand::Ffmpeg { input_url, .. } => input_url,
         }
     }
 
@@ -301,7 +306,7 @@ fn build_recorder_command(recorder: &RecorderCommand, output: &str) -> (Command,
             command.kill_on_drop(true);
             (command, STREAMLINK_PATH)
         }
-        RecorderCommand::Ffmpeg { input_url } => {
+        RecorderCommand::Ffmpeg { input_url, fragment_by_duration } => {
             let mut command = Command::new(FFMPEG_PATH);
             command
                 .arg("-hide_banner")
@@ -325,8 +330,13 @@ fn build_recorder_command(recorder: &RecorderCommand, output: &str) -> (Command,
                 .arg("-movflags")
                 .arg("frag_keyframe+empty_moov")
                 .arg("-f")
-                .arg("mp4")
-                .arg(output);
+                .arg("mp4");
+            // Audio-only streams have no video keyframes to trigger MP4 fragment writes.
+            // Flush timed fragments so stopping at the split threshold preserves playable audio.
+            if *fragment_by_duration {
+                command.args(["-frag_duration", "1000000", "-flush_packets", "1"]);
+            }
+            command.arg(output);
             command.stdout(Stdio::piped()).stderr(Stdio::piped());
             command.kill_on_drop(true);
             (command, FFMPEG_PATH)
@@ -485,6 +495,82 @@ pub(super) async fn decide_next_segment_action(
 
 #[cfg(test)]
 mod tests {
+    #[tokio::test]
+    #[ignore = "requires a public Ximalaya live room, FFmpeg and a temporary BILIUP_RECORDINGS_DIR"]
+    async fn ximalaya_live_recording_creates_two_audio_segments() {
+        use crate::{checker::StreamlinkChecker, db::Db, state::AppState};
+        use dashmap::DashMap;
+        use std::sync::Arc;
+        use tokio::{process::Command, sync::RwLock};
+
+        let root =
+            std::env::var("BILIUP_RECORDINGS_DIR").expect("set isolated recording directory");
+        let canonical_root = std::fs::canonicalize(&root).expect("temporary root must exist");
+        assert!(
+            canonical_root.starts_with(std::fs::canonicalize(std::env::temp_dir()).unwrap())
+                || canonical_root.starts_with(std::fs::canonicalize("/tmp").unwrap())
+        );
+        let url = std::env::var("XIMALAYA_TEST_URL")
+            .unwrap_or_else(|_| "https://m.ximalaya.com/live/room/412".to_owned());
+        let state = Arc::new(AppState {
+            tasks: DashMap::new(),
+            handles: DashMap::new(),
+            checking_urls: DashMap::new(),
+            db: Db::new(&format!("{root}/test.db")).await.expect("create isolated database"),
+            checker: StreamlinkChecker::new(),
+            recording_settings: Arc::new(RwLock::new(Default::default())),
+            login_sessions: DashMap::new(),
+        });
+        assert!(state.checker.check_live(&url).await.expect("check live room"));
+        assert!(state.checker.fetch_live_title(&url).await.is_some());
+        let settings = shared::RecordingSettings {
+            segment_time_sec: Some(60),
+            min_upload_file_size_mb: 0,
+            ..Default::default()
+        };
+        let runtime = crate::recording::build_runtime_config(&url, &settings);
+        let task_id = format!("ximalaya-test-{}", uuid::Uuid::new_v4());
+        let mut filenames = Vec::new();
+        for _ in 0..2 {
+            let result = tokio::time::timeout(
+                std::time::Duration::from_secs(90),
+                super::record_segment(&task_id, &url, &state, &runtime),
+            )
+            .await
+            .expect("recording must reach time limit");
+            assert!(result.limit_reached, "{:?}", result.terminal_error);
+            let output = Command::new("ffprobe")
+                .args([
+                    "-v",
+                    "error",
+                    "-show_entries",
+                    "stream=codec_type,codec_name",
+                    "-show_entries",
+                    "format=duration,size",
+                    "-of",
+                    "json",
+                ])
+                .arg(&result.filename)
+                .output()
+                .await
+                .expect("probe segment");
+            assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+            let probe: serde_json::Value =
+                serde_json::from_slice(&output.stdout).expect("probe JSON");
+            assert!(
+                probe["streams"]
+                    .as_array()
+                    .expect("streams")
+                    .iter()
+                    .any(|stream| stream["codec_type"] == "audio")
+            );
+            assert!(probe["format"]["duration"].as_str().unwrap().parse::<f64>().unwrap() > 0.0);
+            println!("Ximalaya segment: {} {}", result.filename, probe);
+            filenames.push(result.filename);
+        }
+        assert_ne!(filenames[0], filenames[1]);
+    }
+
     use super::{
         ffmpeg_headers_for_input, is_bilibili_cdn_url, is_disk_full_message, is_xiaohongshu_cdn_url,
     };

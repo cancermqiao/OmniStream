@@ -7,6 +7,7 @@ use shared::{
 use std::sync::{Arc, OnceLock};
 
 #[cfg(feature = "server")]
+#[allow(clippy::double_must_use)]
 #[async_trait::async_trait]
 pub trait BackendApi: Send + Sync {
     async fn fetch_downloads(&self) -> Result<Vec<DownloadConfig>, String>;

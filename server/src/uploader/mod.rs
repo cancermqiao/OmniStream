@@ -4,6 +4,7 @@ use shared::UploadConfig;
 
 pub mod bilibili;
 
+#[allow(clippy::double_must_use)]
 #[async_trait]
 pub trait Uploader: Send + Sync {
     /// 上传文件列表

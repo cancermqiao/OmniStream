@@ -18,6 +18,9 @@ impl StreamlinkChecker {
     }
 
     pub async fn check_live(&self, url: &str) -> Result<bool> {
+        if detect_platform(url) == LivePlatform::Ximalaya {
+            return resolve_stream(url, "best").await.map(|stream| stream.is_some());
+        }
         // streamlink --json <url>
         let output = Command::new(STREAMLINK_PATH).arg("--json").arg(url).output().await?;
 
@@ -57,6 +60,9 @@ impl StreamlinkChecker {
     }
 
     pub async fn fetch_live_title(&self, url: &str) -> Option<String> {
+        if detect_platform(url) == LivePlatform::Ximalaya {
+            return fetch_platform_live_title(url).await;
+        }
         let output = match Command::new(STREAMLINK_PATH).arg("--json").arg(url).output().await {
             Ok(output) => output,
             Err(e) => {
@@ -119,6 +125,7 @@ async fn fetch_platform_live_title(url: &str) -> Option<String> {
         LivePlatform::Bilibili
         | LivePlatform::Douyu
         | LivePlatform::Douyin
+        | LivePlatform::Ximalaya
         | LivePlatform::Xiaohongshu => {
             if let Ok(Some(stream)) = resolve_stream(url, "best").await
                 && stream.title.is_some()
