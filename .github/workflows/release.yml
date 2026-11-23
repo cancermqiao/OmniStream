@@ -92,7 +92,9 @@ jobs:
           path: release-assets/omnistream-web-static.tar.gz
 
   linux-package:
-    needs: quality-gate
+    needs:
+      - quality-gate
+      - web-static
     strategy:
       fail-fast: false
       matrix:
@@ -108,21 +110,18 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-unknown-unknown
 
       - name: Cache Cargo
         uses: Swatinem/rust-cache@v2
 
-      - name: Install Dioxus CLI
-        run: cargo install dioxus-cli --version 0.7.10 --locked
-
       - name: Build server binary
         run: cargo build --locked --release -p server --bin server
 
-      - name: Build Web
-        working-directory: web
-        run: dx build --platform web --release
+      - name: Download shared Web artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: web-static
+          path: web-artifact
 
       - name: Package runtime bundle
         shell: bash
@@ -131,7 +130,8 @@ jobs:
           bundle="omnistream-${{ matrix.name }}"
           mkdir -p "release-assets/$bundle/bin/public" "release-assets/$bundle/scripts"
           cp target/release/server "release-assets/$bundle/bin/server"
-          cp -R target/dx/app/release/web/public/. "release-assets/$bundle/bin/public/"
+          tar -xzf web-artifact/omnistream-web-static.tar.gz \
+            -C "release-assets/$bundle/bin/public"
           cp scripts/release-start.sh "release-assets/$bundle/scripts/release-start.sh"
           cp scripts/release-stop.sh "release-assets/$bundle/scripts/release-stop.sh"
           chmod +x "release-assets/$bundle/bin/server" "release-assets/$bundle/scripts/"*.sh

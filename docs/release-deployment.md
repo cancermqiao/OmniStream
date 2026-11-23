@@ -31,6 +31,7 @@
 - `quality-gate`：Release 前再次执行格式、测试、Clippy 和 WASM 检查。
 - `web-static`：构建 Dioxus Web 客户端资源，供 Fullstack 服务端整包使用。
 - `linux-package`：产出 `omnistream-linux-amd64.tar.gz` 和 `omnistream-linux-arm64.tar.gz`。
+- Web/WASM 静态资源由 `web-static` 在 x86_64 runner 上统一编译，两个 Linux 整包下载同一份资源；ARM runner 仅编译原生服务端，避免重复运行前端构建工具。
 - `desktop-package`：产出 Linux x64、macOS Intel、macOS Apple Silicon、Windows x64 桌面端下载包。
 - `android-package`：手动触发且勾选 `build_android` 时，尝试产出未签名 Android 包。
 - `publish-github-release`：汇总所有产物并发布到 GitHub Release。
