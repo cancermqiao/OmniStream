@@ -100,8 +100,9 @@ fn live_session(response: &Value) -> Result<Option<(String, Option<String>)>> {
 
 fn playback_url(response: &Value) -> Result<String> {
     let data = api_data(response)?;
-    // Prefer HTTPS HLS; FFmpeg can remux AAC-only streams into the existing MP4 output.
-    for key in ["tsUrls2", "tsUrls", "aacUrls", "flvUrls2", "flvUrls"] {
+    // Prefer continuous HTTPS FLV. The HLS CDN can return short-lived edge slices
+    // that end or expire while the room is still live.
+    for key in ["flvUrls2", "tsUrls2", "tsUrls", "aacUrls", "flvUrls"] {
         if let Some(urls) = data.get(key).and_then(Value::as_array) {
             for raw in urls.iter().filter_map(Value::as_str) {
                 if let Ok(url) = Url::parse(raw)
@@ -160,7 +161,10 @@ mod tests {
     }
 
     #[test]
-    fn selects_hls_and_handles_invalid_or_missing_streams() {
+    fn selects_continuous_flv_and_handles_invalid_or_missing_streams() {
+        let response = json!({"ret":0,"data":{"flvUrls2":["https://example.com/live.flv"],
+            "tsUrls2":["https://example.com/live.m3u8"]}});
+        assert_eq!(playback_url(&response).unwrap(), "https://example.com/live.flv");
         let response = json!({"ret":0,"data":{"tsUrls2":["https://example.com/live.m3u8"],
             "aacUrls":["http://example.com/audio.m3u8"]}});
         assert_eq!(playback_url(&response).unwrap(), "https://example.com/live.m3u8");
