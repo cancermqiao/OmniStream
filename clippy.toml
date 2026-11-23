@@ -1,4 +1,4 @@
-msrv = "1.94"
+msrv = "1.100"
 
 # Keep function size under control for maintainability.
 too-many-arguments-threshold = 8

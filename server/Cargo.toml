@@ -9,31 +9,31 @@ license.workspace = true
 shared = { path = "../shared" }
 app = { path = "../web", default-features = false, features = ["server"] }
 axum = "0.8.9"
-dioxus-server = { version = "0.7.9", default-features = false, features = ["router"] }
+dioxus-server = { version = "0.7.10", default-features = false, features = ["router"] }
 tokio = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
-tracing-appender = "0.2.4"
+tracing-appender = "0.2.5"
 
 reqwest = { workspace = true }
-tower-http = { version = "0.7.0", features = ["cors"] }
+tower-http = { version = "0.7.1", features = ["cors"] }
 
 anyhow = { workspace = true }
 
 dashmap = "6.2.1" # 高并发线程安全的 HashMap
-uuid = { version = "1.23.3", features = ["v4"] }
-regex = "1.12.4"
-async-trait = "0.1.89"
+uuid = { version = "1.29.3", features = ["v4"] }
+regex = "1.13.2"
+async-trait = "0.1.92"
 sqlx = { version = "0.9.1", features = ["sqlite", "runtime-tokio", "tls-native-tls"] }
-base64 = "0.22.1"
+base64 = "0.23.1"
 md-5 = "0.11.0"
-rand = "0.10.1"
+rand = "0.10.4"
 url = "2.5.9"
 chrono = "0.4.45"
-biliup = { git = "https://github.com/biliup/biliup-rs.git", version = "0.2.4" }
-futures = "0.3.32"
+biliup = { git = "https://github.com/biliup/biliup.git", rev = "98370ec7cdfbc12003f945f3d529b3e173b1f9e2", version = "1.3.5" }
+futures = "0.3.34"
 
 
 [lints]

@@ -47,6 +47,9 @@ pub struct UploadConfig {
     pub tid: u16,
     #[serde(default = "default_copyright")]
     pub copyright: u8,
+    /// Restrict the submitted Bilibili archive to the uploading account.
+    #[serde(default)]
+    pub only_self: bool,
     #[serde(default)]
     pub description: String,
     #[serde(default)]
@@ -63,6 +66,7 @@ impl Default for UploadConfig {
             tags: vec![],
             tid: default_tid(),
             copyright: default_copyright(),
+            only_self: false,
             description: "".to_string(),
             dynamic: "".to_string(),
             account_file: default_account_file(),
@@ -267,6 +271,20 @@ mod tests {
         let json = "{}";
         let config: UploadConfig = serde_json::from_str(json).expect("valid upload config json");
         assert_eq!(config, UploadConfig::default());
+    }
+
+    #[test]
+    fn upload_config_visibility_round_trips_and_defaults_to_public() {
+        let legacy: UploadConfig =
+            serde_json::from_str(r#"{"title":"existing","tid":21}"#).expect("legacy upload config");
+        assert!(!legacy.only_self);
+        for only_self in [false, true] {
+            let config = UploadConfig { only_self, ..legacy.clone() };
+            let json = serde_json::to_string(&config).expect("serialize upload config");
+            let restored: UploadConfig =
+                serde_json::from_str(&json).expect("restore upload config");
+            assert_eq!(restored, config);
+        }
     }
 
     #[test]

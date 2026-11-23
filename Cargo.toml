@@ -1,23 +1,27 @@
 [workspace]
 members = ["shared", "server", "web"]
+exclude = ["patches/biliup"]
 resolver = "2"
 
 [workspace.package]
 edition = "2024"
-rust-version = "1.94"
+rust-version = "1.100"
 license = "MIT"
 
 [workspace.dependencies]
 tokio = { version = "1.54.1", features = ["full"] }
-serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.150"
-anyhow = "1.0.102"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+anyhow = "1.0.105"
 tracing = "0.1.44"
 tracing-subscriber = "0.3.23"
-reqwest = { version = "0.13.4", features = ["json"] }
+reqwest = { version = "0.13.5", features = ["json"] }
 
 [patch.crates-io]
 dioxus-router = { path = "patches/dioxus-router" }
+
+[patch."https://github.com/biliup/biliup.git"]
+biliup = { path = "patches/biliup" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

@@ -106,6 +106,26 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn upload_visibility_survives_save_reload_and_update() {
+        let path = temp_db_path("visibility");
+        let db = Db::new(path.to_str().expect("db path")).await.expect("open db");
+        let mut template = shared::UploadTemplate {
+            id: "visibility".into(),
+            name: "private upload".into(),
+            config: shared::UploadConfig { only_self: true, ..Default::default() },
+        };
+        db.save_upload(&template).await.expect("save private template");
+        let uploads = db.get_uploads().await.expect("reload private template");
+        assert_eq!(uploads, vec![template.clone()]);
+
+        template.config.only_self = false;
+        db.save_upload(&template).await.expect("update public template");
+        assert_eq!(db.get_uploads().await.expect("reload public template"), vec![template]);
+        db.pool.close().await;
+        std::fs::remove_file(path).expect("remove test database");
+    }
+
+    #[tokio::test]
     async fn get_uploads_falls_back_on_malformed_config_json() {
         let path = temp_db_path("malformed-config");
         let db = Db::new(path.to_str().expect("db path")).await.expect("open db");

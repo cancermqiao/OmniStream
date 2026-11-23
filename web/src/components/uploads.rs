@@ -153,7 +153,12 @@ pub fn UploadsPage(
                                                     },
                                                 }
                                             }
-                                            td { "{u.name}" }
+                                            td {
+                                                "{u.name}"
+                                                p { class: "label",
+                                                    if u.config.only_self { "仅自己可见" } else { "公开" }
+                                                }
+                                            }
                                             td { "{account_name}" }
                                             td { class: "title-cell",
                                                 if let Some(title) = u.config.title.clone() {

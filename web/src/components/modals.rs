@@ -301,6 +301,7 @@ pub fn UploadModal(
     let mut title = use_signal(|| template.config.title.clone().unwrap_or_default());
     let mut tid = use_signal(|| template.config.tid);
     let mut copyright = use_signal(|| template.config.copyright);
+    let mut only_self = use_signal(|| template.config.only_self);
     let mut tags = use_signal(|| template.config.tags.clone());
     let mut tag_input = use_signal(String::new);
     let mut description = use_signal(|| template.config.description.clone());
@@ -374,6 +375,18 @@ pub fn UploadModal(
                             "转载"
                         }
                     }
+                }
+
+                div { class: "field",
+                    label { class: "mini-check",
+                        input {
+                            r#type: "checkbox",
+                            checked: only_self(),
+                            onchange: move |e| only_self.set(e.checked()),
+                        }
+                        "仅自己可见"
+                    }
+                    p { class: "label", "开启后，投稿视频仅上传账号本人可观看。" }
                 }
 
                 div { class: "field",
@@ -503,6 +516,7 @@ pub fn UploadModal(
                                     tags: tag_list,
                                     tid: tid(),
                                     copyright: copyright(),
+                                    only_self: only_self(),
                                     description: description(),
                                     dynamic: dynamic(),
                                     account_file: selected_account,

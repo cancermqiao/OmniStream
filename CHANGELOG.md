@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog and this project follows Semantic Versioning.
 
+## [0.2.35] - 2026-11-23
+
+### Added
+- Bilibili upload templates support only-self visibility, with legacy templates remaining public.
+- Visibility is saved in template and queued-task JSON and submitted through Biliup's native `is_only_self` parameter.
+
+### Changed
+- Refresh direct and transitive dependencies for Rust 1.100, including Dioxus 0.7.10, Reqwest 0.13.5, and Biliup 1.3.5.
+- Pin Dioxus CLI to the matching framework version in release and container builds.
+- Patch Biliup to quick-xml 0.42 and RSA 0.10, preserve RSS entity decoding, and remove RSA, instant, and pin-utils audit exceptions.
+
 ## [Unreleased]
 
 ### Added

@@ -72,7 +72,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Install Dioxus CLI
-        run: cargo install dioxus-cli --locked
+        run: cargo install dioxus-cli --version 0.7.10 --locked
 
       - name: Build Web
         working-directory: web
@@ -115,7 +115,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Install Dioxus CLI
-        run: cargo install dioxus-cli --locked
+        run: cargo install dioxus-cli --version 0.7.10 --locked
 
       - name: Build server binary
         run: cargo build --locked --release -p server --bin server
@@ -281,7 +281,7 @@ jobs:
         uses: Swatinem/rust-cache@v2
 
       - name: Install Dioxus CLI
-        run: cargo install dioxus-cli --locked
+        run: cargo install dioxus-cli --version 0.7.10 --locked
 
       - name: Build Android package
         working-directory: web

@@ -3,7 +3,7 @@ use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use biliup::client::StatelessClient;
 use biliup::uploader::VideoFile;
-use biliup::uploader::bilibili::Studio;
+use biliup::uploader::bilibili::{Studio, Video};
 use biliup::uploader::credential::login_by_cookies;
 use biliup::uploader::line::Probe;
 use chrono::Local;
@@ -73,6 +73,29 @@ impl BilibiliUploader {
         }
         Ok(())
     }
+
+    fn build_studio(config: &UploadConfig, title: String, videos: Vec<Video>) -> Studio {
+        let tag =
+            if config.tags.is_empty() { "omnistream".to_string() } else { config.tags.join(",") };
+        Studio::builder()
+            .title(title)
+            .videos(videos)
+            .tid(config.tid)
+            .copyright(config.copyright)
+            .source(String::new())
+            .cover(String::new())
+            .desc(config.description.clone())
+            .dynamic(config.dynamic.clone())
+            .tag(tag)
+            .is_only_self(u8::from(config.only_self))
+            .dolby(0)
+            .no_reprint(0)
+            .charging_pay(0)
+            .up_selection_reply(false)
+            .up_close_reply(false)
+            .up_close_danmu(false)
+            .build()
+    }
 }
 
 #[async_trait]
@@ -121,20 +144,15 @@ impl Uploader for BilibiliUploader {
                 .map_err(|e| anyhow!("Failed to pre_upload: {}", e))?;
 
             // 上传
-            // upload(client, limit, progress_callback, retry)
+            // Chunk retries are handled by biliup internally.
             // progress callback needs to return a Stream<Item = Result<(B, usize), Kind>>
             let video = parcel
-                .upload(
-                    client.clone(),
-                    3,
-                    |stream| {
-                        stream.map_err(biliup::error::Kind::from).map_ok(|b| {
-                            let len = b.len();
-                            (b, len)
-                        })
-                    },
-                    3,
-                )
+                .upload(client.clone(), 3, |stream| {
+                    stream.map_err(biliup::error::Kind::from).map_ok(|b| {
+                        let len = b.len();
+                        (b, len)
+                    })
+                })
                 .await
                 .map_err(|e| anyhow!("Failed to upload file {}: {}", filename, e))?;
 
@@ -157,20 +175,7 @@ impl Uploader for BilibiliUploader {
             title
         );
 
-        // Tag 必须非空，如果 config 中没有，使用 "omnistream"
-        let tag =
-            if config.tags.is_empty() { "omnistream".to_string() } else { config.tags.join(",") };
-
-        let studio = Studio::builder()
-            .title(title)
-            .videos(videos)
-            .tid(config.tid)
-            .copyright(config.copyright)
-            .desc(config.description.clone())
-            .dynamic(config.dynamic.clone())
-            .tag(tag)
-            .desc_v2(None) // required field
-            .build();
+        let studio = Self::build_studio(config, title, videos);
 
         tracing::info!("Submitting archive: {:?}", studio.title);
 
@@ -188,6 +193,31 @@ impl Uploader for BilibiliUploader {
 #[cfg(test)]
 mod tests {
     use super::BilibiliUploader;
+
+    #[test]
+    fn submission_payload_preserves_metadata_and_visibility() {
+        for only_self in [false, true] {
+            let config = shared::UploadConfig {
+                only_self,
+                tid: 21,
+                copyright: 2,
+                tags: vec!["录播".into(), "游戏".into()],
+                description: "视频简介".into(),
+                dynamic: "投稿动态".into(),
+                ..Default::default()
+            };
+            let studio = BilibiliUploader::build_studio(&config, "测试标题".into(), vec![]);
+            let payload = serde_json::to_value(studio).expect("serialize submission payload");
+            assert_eq!(payload["is_only_self"], u8::from(only_self));
+            assert_eq!(payload["title"], "测试标题");
+            assert_eq!(payload["tid"], 21);
+            assert_eq!(payload["copyright"], 2);
+            assert_eq!(payload["tag"], "录播,游戏");
+            assert_eq!(payload["desc"], "视频简介");
+            assert_eq!(payload["dynamic"], "投稿动态");
+            assert_eq!(payload["charging_pay"], 0);
+        }
+    }
 
     #[test]
     fn render_title_uses_live_title_placeholder() {

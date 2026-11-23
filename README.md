@@ -17,7 +17,7 @@ OmniStream 是一个高性能、低资源占用的 B 站直播录制与上传工
 
 *   **Rust**: 需要安装 Rust 工具链 (Cargo)。
 *   **FFmpeg**: 必须安装并加入系统 PATH。
-*   **Dioxus CLI** (可选，用于前端开发): `cargo install dioxus-cli`。
+*   **Dioxus CLI** (可选，用于前端开发): `cargo install dioxus-cli --version 0.7.10 --locked`。
 *   **Biliup CLI**: 系统需安装 Python 版或 Rust 版 `biliup` 命令行工具，并完成登录。
 
 ### 2. 数据目录与初始化
@@ -108,6 +108,9 @@ BILIUP_API_URL=http://<server-ip>:3000/api dx serve --platform android
 ```
 
 ## 📘 前端流程文档
+
+上传任务的投稿参数支持“仅自己可见”。开启后，新投稿会设置为仅上传账号本人可观看；
+旧上传配置默认公开。修改此选项只影响后续投稿，不会修改已经发布的视频。
 
 - `docs/web-flow.md`：Web 前端模块、状态流转、API 时序与页面逻辑图。
 - `docs/release-deployment.md`：GitHub Actions Release、二进制产物和腾讯云部署方案。

@@ -1,0 +1,52 @@
+[package]
+name = "biliup"
+version = "1.3.5"
+edition = "2024"
+description = "Upload video to bilibili."
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+serde_yaml = "0.9.34"
+serde_urlencoded = "0.7"
+reqwest_cookie_store = "0.10.0"
+tokio = { version = "1.54.1", features = ["macros", "rt-multi-thread", "process", "signal", "sync"] }
+tracing = "0.1.44"
+rsa = { version = "0.10.0", features = ["pkcs1v15"] }
+base64 = "0.22"
+md-5 = "0.10.6"
+rand = "0.8"
+rand_crypto = { package = "rand", version = "0.10.4" }
+url = "2.5.9"
+quick-xml = "0.42"
+thiserror = "2"
+cookie = "0.18.1"
+bytes = "1.10.1"
+futures = "0.3.34"
+bon = "3.7.2"
+reqwest-middleware = { version = "0.5", features = ["json"] }
+reqwest-retry = "0.9"
+clap = { version = "4", features = ["derive"], optional = true }
+time = "0.3"
+m3u8-rs = "6"
+nom = "8"
+chrono = { version = "0.4.45", features = ["serde"] }
+byteorder = "1.5.0"
+regex = "1.13.2"
+async-trait = "0.1.92"
+reqwest = { version = "0.13.5", features = ["cookies", "form", "query", "charset", "http2", "brotli", "gzip", "json", "stream"] }
+urlencoding = "2.1"
+libsm = "0.6.0"
+
+[dev-dependencies]
+tracing-subscriber = { version = "0.3.23", features = ["local-time", "env-filter"] }
+tempfile = "3.14"
+http = "1"
+axum = "0.8"
+tokio = { version = "1.54.1", features = ["test-util"] }
+
+[features]
+cli = ["clap"]
+
+[workspace]
