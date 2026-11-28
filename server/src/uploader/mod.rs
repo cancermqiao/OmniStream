@@ -4,6 +4,31 @@ use shared::UploadConfig;
 
 pub mod bilibili;
 
+pub(crate) fn is_transient_upload_error(message: &str) -> bool {
+    let message = message.to_ascii_lowercase();
+    [
+        "所有上传线路测速均失败",
+        "all upload lines failed",
+        "500",
+        "502",
+        "503",
+        "504",
+        "gateway time-out",
+        "gateway timeout",
+        "timeout",
+        "timed out",
+        "error sending request",
+        "connection reset",
+        "connection closed",
+        "connection refused",
+        "connection aborted",
+        "temporarily unavailable",
+        "network",
+    ]
+    .iter()
+    .any(|needle| message.contains(needle))
+}
+
 #[allow(clippy::double_must_use)]
 #[async_trait]
 pub trait Uploader: Send + Sync {

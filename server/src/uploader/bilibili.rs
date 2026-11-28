@@ -1,4 +1,4 @@
-use super::Uploader;
+use super::{Uploader, is_transient_upload_error};
 use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use biliup::client::StatelessClient;
@@ -9,15 +9,56 @@ use biliup::uploader::line::Probe;
 use chrono::Local;
 use futures::TryStreamExt;
 use shared::UploadConfig;
-use std::path::Path;
+use std::{future::Future, path::Path, time::Duration};
+use tokio::time::sleep;
 
 pub struct BilibiliUploader;
 
 impl BilibiliUploader {
     const MAX_TITLE_CHARS: usize = 80;
+    const MAX_LINE_PROBE_ATTEMPTS: usize = 3;
+    const LINE_PROBE_RETRY_DELAYS_SECS: [u64; 2] = [5, 15];
 
     pub fn new() -> Self {
         Self
+    }
+
+    async fn retry_line_probe<F, Fut, T>(filename: &str, mut probe: F) -> Result<T>
+    where
+        F: FnMut() -> Fut,
+        Fut: Future<Output = Result<T>>,
+    {
+        let mut attempt = 1;
+        loop {
+            match probe().await {
+                Ok(line) => return Ok(line),
+                Err(error) => {
+                    let transient = is_transient_upload_error(&error.to_string());
+                    if !transient || attempt == Self::MAX_LINE_PROBE_ATTEMPTS {
+                        tracing::warn!(
+                            "Upload line probe stopped: file={}, attempt={}/{}, transient={}, error={}",
+                            filename,
+                            attempt,
+                            Self::MAX_LINE_PROBE_ATTEMPTS,
+                            transient,
+                            error
+                        );
+                        return Err(error);
+                    }
+                    let delay = Self::LINE_PROBE_RETRY_DELAYS_SECS[attempt - 1];
+                    tracing::warn!(
+                        "Upload line probe failed, retrying current file after {}s: file={}, attempt={}/{}, error={}",
+                        delay,
+                        filename,
+                        attempt,
+                        Self::MAX_LINE_PROBE_ATTEMPTS,
+                        error
+                    );
+                    sleep(Duration::from_secs(delay)).await;
+                    attempt += 1;
+                }
+            }
+        }
     }
 
     fn render_title(template: &str, live_title: Option<&str>, task_name: &str) -> String {
@@ -133,9 +174,12 @@ impl Uploader for BilibiliUploader {
             let video_file = VideoFile::new(path)?;
 
             // 探测线路
-            let line = Probe::probe(&client.client)
-                .await
-                .map_err(|e| anyhow!("Failed to probe upload line: {}", e))?;
+            let line = Self::retry_line_probe(&filename, || async {
+                Probe::probe(&client.client)
+                    .await
+                    .map_err(|e| anyhow!("Failed to probe upload line: {}", e))
+            })
+            .await?;
 
             // 预上传
             let parcel = line
@@ -193,6 +237,76 @@ impl Uploader for BilibiliUploader {
 #[cfg(test)]
 mod tests {
     use super::BilibiliUploader;
+
+    #[tokio::test(start_paused = true)]
+    async fn line_probe_recovers_after_transient_failures() {
+        let mut attempts = 0;
+        let started = tokio::time::Instant::now();
+        let line = BilibiliUploader::retry_line_probe("current.mp4", || {
+            attempts += 1;
+            std::future::ready(if attempts < 3 {
+                Err(anyhow::anyhow!("Failed to probe upload line: 所有上传线路测速均失败"))
+            } else {
+                Ok("usable-line")
+            })
+        })
+        .await
+        .expect("transient probe failures should recover");
+
+        assert_eq!(line, "usable-line");
+        assert_eq!(attempts, 3);
+        assert_eq!(started.elapsed(), std::time::Duration::from_secs(20));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn line_probe_stops_after_bounded_attempts_and_preserves_error() {
+        let mut attempts = 0;
+        let started = tokio::time::Instant::now();
+        let error = BilibiliUploader::retry_line_probe("current.mp4", || {
+            attempts += 1;
+            std::future::ready(Err::<(), _>(anyhow::anyhow!(
+                "Failed to probe upload line: 所有上传线路测速均失败"
+            )))
+        })
+        .await
+        .expect_err("persistent failures must not loop forever");
+
+        assert_eq!(attempts, 3);
+        assert_eq!(started.elapsed(), std::time::Duration::from_secs(20));
+        assert!(super::is_transient_upload_error(&error.to_string()));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn line_probe_does_not_retry_validation_errors() {
+        let mut attempts = 0;
+        let started = tokio::time::Instant::now();
+        let error = BilibiliUploader::retry_line_probe("current.mp4", || {
+            attempts += 1;
+            std::future::ready(Err::<(), _>(anyhow::anyhow!("account_file is required")))
+        })
+        .await
+        .expect_err("validation errors should fail immediately");
+
+        assert_eq!(attempts, 1);
+        assert_eq!(started.elapsed(), std::time::Duration::ZERO);
+        assert_eq!(error.to_string(), "account_file is required");
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn successful_line_probe_does_not_wait_or_retry() {
+        let mut attempts = 0;
+        let started = tokio::time::Instant::now();
+        let line = BilibiliUploader::retry_line_probe("current.mp4", || {
+            attempts += 1;
+            std::future::ready(Ok("usable-line"))
+        })
+        .await
+        .expect("first successful probe should return immediately");
+
+        assert_eq!(line, "usable-line");
+        assert_eq!(attempts, 1);
+        assert_eq!(started.elapsed(), std::time::Duration::ZERO);
+    }
 
     #[test]
     fn submission_payload_preserves_metadata_and_visibility() {

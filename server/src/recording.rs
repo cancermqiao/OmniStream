@@ -20,7 +20,7 @@ use self::task_state::{
 use crate::{
     state::{RecorderHandle, SharedState},
     storage_guard::recording_storage_below_min_free_percent,
-    uploader::UploadTarget,
+    uploader::{UploadTarget, is_transient_upload_error},
 };
 
 const MAX_BATCH_UPLOAD_ATTEMPTS: usize = 3;
@@ -256,29 +256,6 @@ async fn cleanup_uploaded_files(task_id: &str, filenames: &[String]) {
             );
         }
     }
-}
-
-fn is_transient_upload_error(message: &str) -> bool {
-    let message = message.to_ascii_lowercase();
-    [
-        "500",
-        "502",
-        "503",
-        "504",
-        "gateway time-out",
-        "gateway timeout",
-        "timeout",
-        "timed out",
-        "error sending request",
-        "connection reset",
-        "connection closed",
-        "connection refused",
-        "connection aborted",
-        "temporarily unavailable",
-        "network",
-    ]
-    .iter()
-    .any(|needle| message.contains(needle))
 }
 
 async fn prepare_upload_files(

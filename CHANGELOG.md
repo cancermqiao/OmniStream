@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on Keep a Changelog and this project follows Semantic Versioning.
 
+## [0.2.37] - 2026-11-28
+
+### Fixed
+- Retry transient upload-line probing failures for the current file up to three times, waiting 5 and 15 seconds before retrying.
+- Recognize aggregate upload-line probe failures as transient so the existing batch retry mechanism can run after per-file retries are exhausted.
+- Keep already uploaded parts within the current batch attempt while retrying the current file's line probe.
+
 ## [0.2.35] - 2026-11-23
 
 ### Added
